@@ -107,18 +107,24 @@ def run_full_audit(
 @app.on_event("startup")
 def startup_event():
     """Load existing records or pre-load sample tenders on first startup."""
-    existing = load_all_records()
-    if not existing:
-        sample_files = [
-            ("data/sample_tenders/tender_001_ghost_road.txt", "ghost_project"),
-            ("data/sample_tenders/tender_002_verified_park.txt", "genuine_completed"),
-            ("data/sample_tenders/tender_003_partial_canal.txt", "partial_work")
-        ]
-        for filepath, scenario in sample_files:
-            if os.path.exists(filepath):
-                with open(filepath, "r", encoding="utf-8") as f:
-                    text = f.read()
-                run_full_audit(text, scenario)
+    try:
+        existing = load_all_records()
+        if not existing:
+            sample_files = [
+                ("data/sample_tenders/tender_001_ghost_road.txt", "ghost_project"),
+                ("data/sample_tenders/tender_002_verified_park.txt", "genuine_completed"),
+                ("data/sample_tenders/tender_003_partial_canal.txt", "partial_work")
+            ]
+            for filepath, scenario in sample_files:
+                if os.path.exists(filepath):
+                    with open(filepath, "r", encoding="utf-8") as f:
+                        text = f.read()
+                    try:
+                        run_full_audit(text, scenario)
+                    except Exception as e:
+                        print(f"[Startup] Error loading sample {filepath}: {e}")
+    except Exception as e:
+        print(f"[Startup] Error during app startup: {e}")
 
 
 @app.get("/", response_class=HTMLResponse)

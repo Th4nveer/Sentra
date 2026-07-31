@@ -16,6 +16,8 @@ class TriageDashboardGenerator:
         """
         Generates index.html triage queue dashboard following PRD specifications.
         """
+        if not audit_records:
+            audit_records = []
         # Sort records by fraud risk score descending (highest budget x lowest change first)
         sorted_records = sorted(audit_records, key=lambda x: x["audit"].fraud_risk_score, reverse=True)
 
