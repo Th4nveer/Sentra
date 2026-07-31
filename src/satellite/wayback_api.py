@@ -190,9 +190,7 @@ class EsriWaybackClient:
                 x_center=x_center,
                 y_center=y_center,
                 zoom=zoom_level,
-                grid_size=grid_size,
-                center_lat=center_lat,
-                center_lon=center_lon
+                grid_size=grid_size
             )
 
             if mosaic_data is not None:
@@ -208,7 +206,7 @@ class EsriWaybackClient:
                 }
 
         # Fallback to standard Esri tile grid if release query fails
-        crop_data = self._fetch_standard_esri_grid(x_center, y_center, zoom_level, grid_size, center_lat=center_lat, center_lon=center_lon)
+        crop_data = self._fetch_standard_esri_grid(x_center, y_center, zoom_level, grid_size)
         return {
             "source": "Esri World Imagery Basemap (Sub-5m)",
             "date": date_str,
@@ -226,14 +224,11 @@ class EsriWaybackClient:
         x_center: int,
         y_center: int,
         zoom: int,
-        grid_size: int = 3,
-        center_lat: Optional[float] = None,
-        center_lon: Optional[float] = None
+        grid_size: int = 3
     ) -> Optional[Dict[str, Any]]:
         """
         Downloads a grid_size x grid_size tile matrix around x_center, y_center
         and stitches them into a seamless high-resolution composite canvas.
-        Precision-crops 512x512 around exact (center_lat, center_lon) position.
         """
         half = grid_size // 2
         tile_width = 256
@@ -275,22 +270,8 @@ class EsriWaybackClient:
                     canvas.paste(placeholder, (col_idx * tile_width, row_idx * tile_width))
 
         if downloaded_count > 0:
-            # Precision sub-tile cropping centered on exact coordinates
-            if center_lat is not None and center_lon is not None:
-                x_cont, y_cont = self.latlon_to_continuous_tile(center_lat, center_lon, zoom)
-                px = 256.0 + (x_cont - x_center) * 256.0
-                py = 256.0 + (y_cont - y_center) * 256.0
-
-                crop_left = int(round(px - 256.0))
-                crop_top = int(round(py - 256.0))
-
-                crop_left = max(0, min(mosaic_size - 512, crop_left))
-                crop_top = max(0, min(mosaic_size - 512, crop_top))
-
-                high_res_img = canvas.crop((crop_left, crop_top, crop_left + 512, crop_top + 512))
-            else:
-                high_res_img = canvas.resize((512, 512), Image.Resampling.LANCZOS)
-
+            # Resize mosaic to standard 512x512 array for Change Detection engine
+            high_res_img = canvas.resize((512, 512), Image.Resampling.LANCZOS)
             rgb_arr = np.array(high_res_img, dtype=np.float32) / 255.0
 
             # Estimate Near-Infrared (NIR) channel from green/red reflectance
@@ -337,15 +318,7 @@ class EsriWaybackClient:
 
         return None
 
-    def _fetch_standard_esri_grid(
-        self,
-        x_center: int,
-        y_center: int,
-        z: int,
-        grid_size: int = 3,
-        center_lat: Optional[float] = None,
-        center_lon: Optional[float] = None
-    ) -> Dict[str, Any]:
+    def _fetch_standard_esri_grid(self, x_center: int, y_center: int, z: int, grid_size: int = 3) -> Dict[str, Any]:
         """Fallback standard Esri tile grid fetcher."""
         half = grid_size // 2
         tile_width = 256
@@ -364,22 +337,7 @@ class EsriWaybackClient:
                 except Exception:
                     pass
 
-        if center_lat is not None and center_lon is not None:
-            x_cont, y_cont = self.latlon_to_continuous_tile(center_lat, center_lon, z)
-            px = 256.0 + (x_cont - x_center) * 256.0
-            py = 256.0 + (y_cont - y_center) * 256.0
-
-            crop_left = int(round(px - 256.0))
-            crop_top = int(round(py - 256.0))
-
-            mosaic_size = grid_size * tile_width
-            crop_left = max(0, min(mosaic_size - 512, crop_left))
-            crop_top = max(0, min(mosaic_size - 512, crop_top))
-
-            high_res_img = canvas.crop((crop_left, crop_top, crop_left + 512, crop_top + 512))
-        else:
-            high_res_img = canvas.resize((512, 512), Image.Resampling.LANCZOS)
-
+        high_res_img = canvas.resize((512, 512), Image.Resampling.LANCZOS)
         rgb_arr = np.array(high_res_img, dtype=np.float32) / 255.0
         nir_channel = np.clip(rgb_arr[:, :, 1] * 1.25 - rgb_arr[:, :, 0] * 0.25, 0.0, 1.0)
         arr_4band = np.dstack((rgb_arr, nir_channel)).astype(np.float32)
@@ -393,12 +351,3 @@ class EsriWaybackClient:
         x_tile = int((lon + 180.0) / 360.0 * n)
         y_tile = int((1.0 - math.log(math.tan(lat_rad) + (1.0 / math.cos(lat_rad))) / math.pi) / 2.0 * n)
         return x_tile, y_tile
-
-    @staticmethod
-    def latlon_to_continuous_tile(lat: float, lon: float, zoom: int) -> Tuple[float, float]:
-        """Converts latitude, longitude to continuous floating-point Web Mercator tile numbers (X, Y) at given zoom level."""
-        lat_rad = math.radians(lat)
-        n = 2.0 ** zoom
-        x_cont = (lon + 180.0) / 360.0 * n
-        y_cont = (1.0 - math.log(math.tan(lat_rad) + (1.0 / math.cos(lat_rad))) / math.pi) / 2.0 * n
-        return x_cont, y_cont
