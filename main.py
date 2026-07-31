@@ -209,9 +209,47 @@ def run_scan():
         print("\n[!] No tenders were successfully audited.")
 
 
+def run_clear():
+    """
+    Clears all saved database records, cached satellite arrays, and generated report evidence cards.
+    """
+    import shutil
+    from src.report.record_store import clear_all_records
+
+    print("=" * 80)
+    print("      SENTRA: CLEARING ALL AUDIT DATA AND CACHED REPORTS     ")
+    print("=" * 80)
+
+    clear_all_records()
+
+    folders_to_purge = [
+        "./data/reports",
+        "./data/satellite_cache",
+        "./data/processed"
+    ]
+
+    for folder in folders_to_purge:
+        if os.path.exists(folder):
+            for item in os.listdir(folder):
+                item_path = os.path.join(folder, item)
+                try:
+                    if os.path.isfile(item_path) or os.path.islink(item_path):
+                        os.unlink(item_path)
+                    elif os.path.isdir(item_path):
+                        shutil.rmtree(item_path)
+                except Exception as e:
+                    print(f"[Clear] Failed to delete {item_path}: {e}")
+
+    print("[SUCCESS] Sentra audit data, database, and report caches wiped clean.")
+    print("=" * 80)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Sentra CLI Satellite Audit Tool")
     subparsers = parser.add_subparsers(dest="command", help="Command to run")
+
+    # Clear command
+    clear_cmd = subparsers.add_parser("clear", help="Clear all database records, report cards, and satellite caches")
 
     # Demo command
     demo_parser = subparsers.add_parser("demo", help="Run satellite audit on realistic demo tender dataset")
@@ -230,7 +268,9 @@ def main():
 
     args = parser.parse_args()
 
-    if args.command == "demo" or args.command is None:
+    if args.command == "clear":
+        run_clear()
+    elif args.command == "demo" or args.command is None:
         run_demo()
     elif args.command == "audit":
         if not args.file or not os.path.exists(args.file):
