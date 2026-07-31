@@ -23,7 +23,8 @@ def save_record(record: Dict[str, Any]) -> None:
     tender_id = tender.tender_id if hasattr(tender, "tender_id") else tender.get("tender_id")
 
     # Ignore default offline fallback ID to prevent network-failed parses from cluttering DB
-    if tender_id == "TND-2024-DEF-001":
+    # Community report IDs (CR-*) are always allowed through
+    if tender_id == "TND-2024-DEF-001" and not tender_id.startswith("CR-"):
         print("[RecordStore] Skipping database save for default fallback record.")
         return
 

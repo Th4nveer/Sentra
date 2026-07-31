@@ -144,6 +144,36 @@ class Geocoder:
             geocoding_source="fallback"
         )
 
+    def geocode_coordinates(self, lat: float, lon: float, radius_km: float = 0.5) -> GeocodingResult:
+        """
+        Creates a GeocodingResult directly from coordinates (e.g. from a user map pin).
+        Attempts reverse geocoding via Nominatim for a human-readable address.
+        """
+        bbox = self._calculate_bbox(lat, lon, radius_km)
+        formatted_address = f"({lat:.4f}, {lon:.4f})"
+
+        # Attempt reverse geocode for a readable address
+        try:
+            url = "https://nominatim.openstreetmap.org/reverse"
+            headers = {"User-Agent": self.user_agent}
+            params = {"lat": lat, "lon": lon, "format": "json", "zoom": 16}
+            response = requests.get(url, headers=headers, params=params, timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                if "display_name" in data:
+                    formatted_address = data["display_name"]
+        except Exception as e:
+            print(f"[Geocoder] Reverse geocode failed for ({lat}, {lon}): {e}")
+
+        return GeocodingResult(
+            latitude=lat,
+            longitude=lon,
+            bounding_box=bbox,
+            confidence=1.0,
+            formatted_address=formatted_address,
+            geocoding_source="community_pin"
+        )
+
     def _calculate_bbox(self, lat: float, lon: float, radius_km: float = 0.5) -> list:
         """
         Calculates bounding box [min_lat, min_lon, max_lat, max_lon] around center coordinate.

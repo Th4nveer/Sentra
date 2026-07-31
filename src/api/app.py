@@ -2,6 +2,7 @@
 FastAPI Web API Server & Interactive Web Application for Sentra AI Satellite Audit Platform.
 """
 import os
+from datetime import date
 from typing import Optional, List
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
@@ -11,6 +12,7 @@ from pydantic import BaseModel
 from src.parser.tender_parser import TenderParser
 from src.parser.geocoder import Geocoder
 from src.parser.folder_scanner import FolderScanner
+from src.parser.community_report import CommunityReport
 from src.satellite.fetcher import SatelliteFetcher
 from src.cv_engine.detector import ChangeDetectionPipeline
 from src.report.evidence_card import EvidenceCardGenerator
@@ -19,7 +21,7 @@ from src.report.triage_dashboard import TriageDashboardGenerator
 app = FastAPI(
     title="Sentra AI Satellite Audit API & Dashboard",
     description="Automated space-borne AI satellite audit platform for public infrastructure",
-    version="1.1.0"
+    version="2.0.0"
 )
 
 # Ensure directories exist and mount static files
@@ -44,6 +46,14 @@ AUDITED_RECORDS = []
 class AuditRequest(BaseModel):
     tender_text: str
     scenario_override: Optional[str] = None
+
+
+class CommunityReportRequest(BaseModel):
+    title: str
+    description: Optional[str] = ""
+    latitude: float
+    longitude: float
+    estimated_start_date: Optional[str] = None
 
 
 from src.report.record_store import save_record, load_all_records, clear_all_records
@@ -97,6 +107,52 @@ def run_full_audit(
     return record, card_res
 
 
+def run_community_report_audit(report: CommunityReport):
+    """
+    Runs the full satellite audit pipeline for a community-submitted report.
+    Converts the report into TenderData and uses direct coordinates for geocoding.
+    """
+    tender = report.to_tender_data()
+    geocoding = geocoder_service.geocode_coordinates(report.latitude, report.longitude)
+
+    sat_data = satellite_service.fetch_dual_temporal_imagery(
+        tender_id=tender.tender_id,
+        bounding_box=geocoding.bounding_box,
+        start_date=tender.start_date,
+        completion_date=tender.completion_date,
+        project_type=tender.project_type
+    )
+
+    audit_res = cv_pipeline.analyze_change(
+        tender_id=tender.tender_id,
+        project_type=tender.project_type,
+        budget_inr=tender.budget_inr,
+        before_arr=sat_data["before_array"],
+        after_arr=sat_data["after_array"]
+    )
+
+    card_res = evidence_generator.generate_card(
+        tender=tender,
+        geocoding=geocoding,
+        sat_data=sat_data,
+        audit_result=audit_res
+    )
+
+    record = {
+        "tender": tender,
+        "geocoding": geocoding,
+        "audit": audit_res,
+        "card_path": card_res["card_html_path"]
+    }
+
+    save_record(record)
+
+    all_records = load_all_records()
+    dashboard_generator.generate_dashboard(all_records)
+
+    return record, card_res
+
+
 @app.on_event("startup")
 def startup_event():
     """Load existing records or pre-load sample tenders on first startup."""
@@ -123,19 +179,16 @@ def startup_event():
 @app.get("/", response_class=HTMLResponse)
 def serve_home():
     """
-    Renders the full interactive Sentra AI Web Application directly at the root URL.
-    Loads persisted audited records from record_store database.
+    Renders the full interactive Sentra AI Web Application at the root URL.
+    Includes community report submission with interactive map and simplified audit results table.
     """
     try:
         audited_records = load_all_records() or []
         total_audited = len(audited_records)
-        ghost_count = sum(1 for r in audited_records if r["audit"].classification == "PRIORITY_FIELD_VERIFICATION_RECOMMENDED")
-        partial_count = sum(1 for r in audited_records if r["audit"].classification == "PARTIAL_CHANGE_DETECTED")
+        flagged_count = sum(1 for r in audited_records if r["audit"].classification in [
+            "PRIORITY_FIELD_VERIFICATION_RECOMMENDED", "PARTIAL_CHANGE_DETECTED"
+        ])
         verified_count = sum(1 for r in audited_records if r["audit"].classification == "HIGH_PHYSICAL_CHANGE_VERIFIED")
-        flagged_leakage = sum(
-            r["tender"].budget_inr for r in audited_records 
-            if r["audit"].classification in ["PRIORITY_FIELD_VERIFICATION_RECOMMENDED", "PARTIAL_CHANGE_DETECTED"]
-        )
 
         # Get pending tender count
         pending_count = folder_scanner.get_pending_count() if folder_scanner else 0
@@ -144,21 +197,34 @@ def serve_home():
         for r in sorted(audited_records, key=lambda x: x["audit"].fraud_risk_score, reverse=True):
             t = r["tender"]
             a = r["audit"]
+            g = r["geocoding"]
             badge_cls = f"badge-{a.classification}"
-            badge_label = a.classification.replace("_", " ")
-            alt_color = "var(--accent-red)" if a.physical_alteration_score < 20 else "var(--accent-green)"
-            fraud_color = "var(--accent-red)" if a.fraud_risk_score >= 75 else ("var(--accent-yellow)" if a.fraud_risk_score >= 40 else "var(--accent-green)")
+            
+            # Human-readable verdict labels
+            verdict_map = {
+                "PRIORITY_FIELD_VERIFICATION_RECOMMENDED": "Flagged",
+                "PARTIAL_CHANGE_DETECTED": "Partial",
+                "HIGH_PHYSICAL_CHANGE_VERIFIED": "Verified"
+            }
+            badge_label = verdict_map.get(a.classification, a.classification.replace("_", " "))
+            
+            # Truncate location for table display
+            location_display = g.formatted_address
+            if len(location_display) > 50:
+                location_display = location_display[:47] + "..."
+            
+            # Source tag for community vs tender
+            source_tag = "👥 Community" if t.tender_id.startswith("CR-") else "📄 Tender"
 
             rows_html += f"""
             <tr>
-                <td><strong style="color:#ffffff;">{t.tender_id}</strong></td>
-                <td>{t.project_name}</td>
-                <td>{t.department}</td>
-                <td>Rs. {t.budget_inr / 10000000:.2f} Cr</td>
-                <td><strong style="color:{alt_color};">{a.physical_alteration_score}%</strong></td>
-                <td><strong style="color:{fraud_color};">{a.fraud_risk_score}%</strong></td>
+                <td>
+                    <div class="project-name">{t.project_name}</div>
+                    <div class="project-meta">{source_tag} · {t.tender_id}</div>
+                </td>
+                <td class="location-cell">{location_display}</td>
                 <td><span class="badge {badge_cls}">{badge_label}</span></td>
-                <td><a class="btn-card" href="/reports/{t.tender_id}/evidence_card.html" target="_blank">View Card</a></td>
+                <td><a class="btn-card" href="/reports/{t.tender_id}/evidence_card.html" target="_blank">View</a></td>
             </tr>
             """
 
@@ -170,6 +236,7 @@ def serve_home():
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SENTRA - AI Satellite Audit for Public Infrastructure</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         :root {{
             --bg: #090d16;
@@ -269,7 +336,7 @@ def serve_home():
 
         .stats-grid {{
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
+            grid-template-columns: repeat(3, 1fr);
             gap: 1.25rem;
             margin-bottom: 2rem;
         }}
@@ -294,7 +361,8 @@ def serve_home():
             font-weight: 700;
         }}
 
-        .audit-panel {{
+        /* ---- Report Panel ---- */
+        .report-panel {{
             background: var(--card-bg);
             border: 1px solid var(--card-border);
             border-radius: 16px;
@@ -302,13 +370,133 @@ def serve_home():
             margin-bottom: 2rem;
         }}
 
+        .panel-header {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.25rem;
+        }}
+
         .panel-title {{
             font-size: 1.1rem;
             font-weight: 600;
-            margin-bottom: 1rem;
             color: #ffffff;
         }}
 
+        .report-form {{
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+        }}
+
+        .form-left {{
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }}
+
+        .form-group {{
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }}
+
+        .form-group label {{
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            font-weight: 500;
+        }}
+
+        .form-group input,
+        .form-group textarea {{
+            width: 100%;
+            background: #0d1322;
+            border: 1px solid var(--card-border);
+            border-radius: 10px;
+            color: #fff;
+            padding: 0.7rem 1rem;
+            font-family: inherit;
+            font-size: 0.9rem;
+            transition: border-color 0.2s ease;
+        }}
+
+        .form-group input:focus,
+        .form-group textarea:focus {{
+            outline: none;
+            border-color: var(--accent-blue);
+        }}
+
+        .form-group textarea {{
+            resize: vertical;
+            min-height: 70px;
+        }}
+
+        .coord-display {{
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+            padding: 0.6rem 1rem;
+            background: rgba(59, 130, 246, 0.08);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            border-radius: 10px;
+            font-size: 0.85rem;
+        }}
+
+        .coord-display span {{
+            color: var(--accent-blue);
+            font-weight: 600;
+            font-family: 'Courier New', monospace;
+        }}
+
+        .form-right {{
+            display: flex;
+            flex-direction: column;
+        }}
+
+        #reportMap {{
+            flex: 1;
+            min-height: 280px;
+            border-radius: 12px;
+            border: 1px solid var(--card-border);
+            z-index: 1;
+        }}
+
+        .map-hint {{
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 0.5rem;
+            text-align: center;
+        }}
+
+        .btn-submit {{
+            background: linear-gradient(135deg, #ef4444, #3b82f6);
+            color: #ffffff;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 10px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 14px rgba(59, 130, 246, 0.4);
+            transition: all 0.2s ease;
+            margin-top: 0.5rem;
+            width: 100%;
+        }}
+
+        .btn-submit:hover {{
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(59, 130, 246, 0.6);
+        }}
+
+        .btn-submit:disabled {{
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }}
+
+        /* ---- Scan Section ---- */
         .scan-section {{
             display: flex;
             align-items: center;
@@ -317,7 +505,7 @@ def serve_home():
             background: rgba(139, 92, 246, 0.08);
             border: 1px dashed var(--accent-purple);
             border-radius: 12px;
-            margin-bottom: 1.25rem;
+            margin-bottom: 2rem;
         }}
 
         .scan-info {{
@@ -370,90 +558,72 @@ def serve_home():
             transform: none;
         }}
 
-        .divider {{
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            margin-bottom: 1.25rem;
-            color: var(--text-muted);
-            font-size: 0.75rem;
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-        }}
-
-        .divider::before, .divider::after {{
-            content: '';
-            flex: 1;
-            height: 1px;
-            background: var(--card-border);
-        }}
-
-        .sample-buttons {{
-            display: flex;
-            gap: 10px;
-            margin-bottom: 1rem;
-            flex-wrap: wrap;
-        }}
-
-        .btn-sample {{
-            background: rgba(30, 41, 59, 0.8);
-            border: 1px solid var(--card-border);
-            color: var(--text-main);
-            padding: 8px 14px;
-            border-radius: 8px;
-            font-size: 0.85rem;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }}
-
-        .btn-sample:hover {{
-            background: var(--accent-blue);
-            border-color: var(--accent-blue);
-            color: #fff;
-        }}
-
-        textarea {{
-            width: 100%;
-            height: 110px;
-            background: #0d1322;
-            border: 1px solid var(--card-border);
+        .btn-clear {{
+            background: transparent;
+            border: 1px solid rgba(239, 68, 68, 0.4);
+            color: var(--accent-red);
+            padding: 10px 16px;
             border-radius: 10px;
-            color: #fff;
-            padding: 1rem;
-            font-family: inherit;
-            font-size: 0.9rem;
-            resize: vertical;
-            margin-bottom: 1rem;
-        }}
-
-        textarea:focus {{
-            outline: none;
-            border-color: var(--accent-blue);
-        }}
-
-        .btn-run {{
-            background: linear-gradient(135deg, #ef4444, #3b82f6);
-            color: #ffffff;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 10px;
-            font-size: 0.95rem;
+            font-size: 0.82rem;
             font-weight: 600;
             cursor: pointer;
-            box-shadow: 0 4px 14px rgba(59, 130, 246, 0.4);
             transition: all 0.2s ease;
+            white-space: nowrap;
         }}
 
-        .btn-run:hover {{
-            transform: translateY(-1px);
-            box-shadow: 0 6px 20px rgba(59, 130, 246, 0.6);
+        .btn-clear:hover {{
+            background: rgba(239, 68, 68, 0.1);
+            border-color: var(--accent-red);
         }}
 
+        /* ---- Status Messages ---- */
+        .status-msg {{
+            margin-top: 0.75rem;
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            font-size: 0.82rem;
+            display: none;
+        }}
+
+        .status-msg.processing {{
+            display: block;
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid var(--accent-blue);
+            color: var(--accent-blue);
+        }}
+
+        .status-msg.success {{
+            display: block;
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid var(--accent-green);
+            color: var(--accent-green);
+        }}
+
+        .status-msg.error {{
+            display: block;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid var(--accent-red);
+            color: var(--accent-red);
+        }}
+
+        /* ---- Table ---- */
         .table-panel {{
             background: var(--card-bg);
             border: 1px solid var(--card-border);
             border-radius: 16px;
             overflow: hidden;
+        }}
+
+        .table-header {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.25rem 1.5rem 0.75rem 1.5rem;
+        }}
+
+        .table-header h2 {{
+            font-size: 1rem;
+            font-weight: 600;
         }}
 
         table {{
@@ -464,8 +634,8 @@ def serve_home():
 
         th {{
             background: rgba(15, 23, 42, 0.9);
-            padding: 1rem;
-            font-size: 0.75rem;
+            padding: 0.85rem 1.25rem;
+            font-size: 0.72rem;
             color: var(--text-muted);
             text-transform: uppercase;
             letter-spacing: 0.05em;
@@ -473,15 +643,32 @@ def serve_home():
         }}
 
         td {{
-            padding: 1rem;
+            padding: 1rem 1.25rem;
             border-bottom: 1px solid var(--card-border);
             font-size: 0.88rem;
         }}
 
         tr:hover {{ background: rgba(30, 41, 59, 0.4); }}
+        tr:last-child td {{ border-bottom: none; }}
+
+        .project-name {{
+            font-weight: 600;
+            color: #ffffff;
+            margin-bottom: 2px;
+        }}
+
+        .project-meta {{
+            font-size: 0.72rem;
+            color: var(--text-muted);
+        }}
+
+        .location-cell {{
+            color: var(--text-muted);
+            font-size: 0.82rem;
+        }}
 
         .badge {{
-            padding: 4px 10px;
+            padding: 4px 12px;
             border-radius: 9999px;
             font-weight: 600;
             font-size: 0.72rem;
@@ -496,41 +683,31 @@ def serve_home():
             background: var(--accent-blue);
             color: #ffffff;
             text-decoration: none;
-            padding: 5px 12px;
+            padding: 5px 14px;
             border-radius: 6px;
             font-size: 0.8rem;
             font-weight: 600;
             display: inline-block;
+            transition: opacity 0.2s;
         }}
-        .btn-card:hover {{ opacity: 0.9; }}
+        .btn-card:hover {{ opacity: 0.85; }}
 
-        .scan-status {{
-            margin-top: 0.75rem;
-            padding: 0.75rem 1rem;
-            border-radius: 8px;
-            font-size: 0.82rem;
-            display: none;
-        }}
-
-        .scan-status.processing {{
-            display: block;
-            background: rgba(59, 130, 246, 0.1);
-            border: 1px solid var(--accent-blue);
-            color: var(--accent-blue);
+        .empty-state {{
+            text-align: center;
+            padding: 3rem 2rem;
+            color: var(--text-muted);
         }}
 
-        .scan-status.success {{
-            display: block;
-            background: rgba(16, 185, 129, 0.1);
-            border: 1px solid var(--accent-green);
-            color: var(--accent-green);
+        .empty-state .icon {{
+            font-size: 2.5rem;
+            margin-bottom: 0.75rem;
         }}
 
-        .scan-status.error {{
-            display: block;
-            background: rgba(239, 68, 68, 0.1);
-            border: 1px solid var(--accent-red);
-            color: var(--accent-red);
+        @media (max-width: 768px) {{
+            body {{ padding: 1rem; }}
+            .stats-grid {{ grid-template-columns: 1fr; }}
+            .report-form {{ grid-template-columns: 1fr; }}
+            .scan-section {{ flex-direction: column; text-align: center; }}
         }}
     </style>
 </head>
@@ -545,7 +722,7 @@ def serve_home():
         </div>
         <div class="status-pill">
             <div class="pulse-dot"></div>
-            Esri World Imagery Wayback API Active
+            Esri World Imagery Wayback Active
         </div>
     </div>
 
@@ -556,110 +733,198 @@ def serve_home():
                 <div class="stat-value" style="color:var(--accent-blue);">{total_audited}</div>
             </div>
             <div class="stat-card">
-                <div class="stat-title">Flagged Ghost Projects</div>
-                <div class="stat-value" style="color:var(--accent-red);">{ghost_count}</div>
+                <div class="stat-title">Flagged for Verification</div>
+                <div class="stat-value" style="color:var(--accent-red);">{flagged_count}</div>
             </div>
             <div class="stat-card">
-                <div class="stat-title">Partial Work Alerts</div>
-                <div class="stat-value" style="color:var(--accent-yellow);">{partial_count}</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-title">Flagged Budget Leakage</div>
-                <div class="stat-value" style="color:var(--accent-red);">Rs. {flagged_leakage / 10000000:.2f} Cr</div>
+                <div class="stat-title">Verified</div>
+                <div class="stat-value" style="color:var(--accent-green);">{verified_count}</div>
             </div>
         </div>
 
-        <div class="audit-panel">
-            <div class="panel-title">Run Real-Time Satellite Audit</div>
+        <div class="report-panel">
+            <div class="panel-header">
+                <div class="panel-title">📍 Report Infrastructure Work</div>
+            </div>
 
-            <div class="scan-section">
-                <div class="scan-info">
-                    <div class="label">📂 Scan Tender Folder</div>
-                    <div class="hint">Drop PDF, image, or text files into <code>data/raw_tenders/</code> and click scan</div>
+            <div class="report-form">
+                <div class="form-left">
+                    <div class="form-group">
+                        <label>Work Title</label>
+                        <input type="text" id="reportTitle" placeholder="e.g. Road resurfacing near Silk Board" />
+                    </div>
+                    <div class="form-group">
+                        <label>Description (optional)</label>
+                        <textarea id="reportDesc" placeholder="Any details about the infrastructure work..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Estimated Start Date</label>
+                        <input type="date" id="reportDate" />
+                    </div>
+                    <div class="coord-display">
+                        📌 Pin: <span id="coordLat">—</span>, <span id="coordLon">—</span>
+                    </div>
+                    <button class="btn-submit" id="submitBtn" onclick="submitReport()">Run Satellite Audit</button>
                 </div>
-                <span class="pending-badge">{pending_count} pending</span>
-                <div style="display: flex; gap: 8px;">
-                    <button class="btn-scan" id="scanBtn" onclick="scanFolder()">Scan & Audit All</button>
-                    <button class="btn-sample" style="border-color: var(--accent-red); color: var(--accent-red);" onclick="clearHistory()">Clear History</button>
+                <div class="form-right">
+                    <div id="reportMap"></div>
+                    <div class="map-hint">Drag the pin to the work location · Scroll to zoom</div>
                 </div>
             </div>
-            <div id="scanStatus" class="scan-status"></div>
-
-            <div class="divider">or paste tender text manually</div>
-
-            <div class="sample-buttons">
-                <button class="btn-sample" onclick="loadSample(1)">Load Sample 1: Ghost Road Project (₹4.5 Cr)</button>
-                <button class="btn-sample" onclick="loadSample(2)">Load Sample 2: Verified Civic Park (₹1.2 Cr)</button>
-                <button class="btn-sample" onclick="loadSample(3)">Load Sample 3: Partial Canal Work (₹2.8 Cr)</button>
-            </div>
-            <textarea id="tenderInput" placeholder="Paste tender document circular or work order text here..."></textarea>
-            <button class="btn-run" onclick="executeAudit()">Run Space-Borne AI Audit</button>
+            <div id="reportStatus" class="status-msg"></div>
         </div>
+
+        <div class="scan-section">
+            <div class="scan-info">
+                <div class="label">📂 Scan Tender Folder</div>
+                <div class="hint">Drop PDF, image, or text files into <code>data/raw_tenders/</code> and click scan</div>
+            </div>
+            <span class="pending-badge">{pending_count} pending</span>
+            <div style="display: flex; gap: 8px;">
+                <button class="btn-scan" id="scanBtn" onclick="scanFolder()">Scan & Audit</button>
+                <button class="btn-clear" onclick="clearHistory()">Clear All</button>
+            </div>
+        </div>
+        <div id="scanStatus" class="status-msg"></div>
 
         <div class="table-panel">
+            <div class="table-header">
+                <h2>Audit Results</h2>
+            </div>
             <table>
                 <thead>
                     <tr>
-                        <th>Tender ID</th>
-                        <th>Project Title</th>
-                        <th>Department</th>
-                        <th>Budget</th>
-                        <th>Physical Change</th>
-                        <th>Fraud Risk</th>
-                        <th>Audit Verdict</th>
-                        <th>Evidence Card</th>
+                        <th>Project</th>
+                        <th>Location</th>
+                        <th>Verdict</th>
+                        <th>Evidence</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {rows_html}
+                    {rows_html if rows_html else '<tr><td colspan="4"><div class="empty-state"><div class="icon">🛰️</div><div>No audits yet. Report a work site above or scan tender documents.</div></div></td></tr>'}
                 </tbody>
             </table>
         </div>
     </div>
 
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
-        const samples = {{
-            1: `GOVERNMENT OF KARNATAKA\\nMUNICIPAL CORPORATION PUBLIC WORKS DEPARTMENT\\nWORK ORDER CIRCULAR\\n\\nTENDER REF: TND-2024-BLR-0912\\nDate: 2024-01-10\\n\\nProject Title: Resurfacing & Asphalt Paving of Ward 12 Main Connector Road\\nDepartment: Bruhat Bengaluru Mahanagara Palike (BBMP) Works Department\\nAwarded Contractor: Apex Civic Infrastructure Ltd.\\n\\nSanctioned Budget: Rs. 4,50,00,000 (INR Four Crore Fifty Lakhs Only)\\nWork Commencement Date: 2024-01-15\\nStipulated Completion Date: 2024-06-30\\n\\nSite Location: Ward 12 Main Connector Road, Outer Ring Road, Bellandur, Bengaluru, Karnataka 560103\\nCoordinates / ROI: 12.9352, 77.6245\\n\\nCompletion Status: Contractor reported 100% completion on 2024-06-30. Full final payment disbursed.`,
-            2: `NOIDA DEVELOPMENT AUTHORITY\\nCIVIC INFRASTRUCTURE DIVISION\\n\\nTENDER REF: TND-2024-ND-0441\\nDate: 2024-01-20\\n\\nProject Title: Development of Sector 4 Civic Park & Plantation\\nDepartment: Noida Urban Development Authority\\nAwarded Contractor: GreenTech Urban Eco Ltd.\\n\\nSanctioned Budget: Rs. 1,20,00,000 (INR One Crore Twenty Lakhs Only)\\nWork Commencement Date: 2024-02-01\\nStipulated Completion Date: 2024-07-15\\n\\nSite Location: Sector 4 Civic Park, Noida, Uttar Pradesh 201301\\nCoordinates / ROI: 28.5355, 77.3910\\n\\nCompletion Status: Work completed on 2024-07-15.`,
-            3: `KARNATAKA URBAN WATER SUPPLY BOARD\\nSTORM WATER DRAINAGE CELL\\n\\nTENDER REF: TND-2024-BLR-0883\\nDate: 2024-02-15\\n\\nProject Title: Stormwater Drainage Canal Construction on Hosur Main Road\\nDepartment: KUWSDB & BBMP Drainage Cell\\nAwarded Contractor: Royal City Constructions Pvt Ltd.\\n\\nSanctioned Budget: Rs. 2,80,00,000 (INR Two Crore Eighty Lakhs Only)\\nWork Commencement Date: 2024-03-01\\nStipulated Completion Date: 2024-08-30\\n\\nSite Location: Hosur Main Road Drainage Canal, Kudlu Gate Signal, Bengaluru, Karnataka 560068\\nCoordinates / ROI: 12.9116, 77.6389\\n\\nCompletion Status: Reported 100% completed on 2024-08-30.`
-        }};
+        // ---- Map Initialization ----
+        const defaultLat = 12.9716;
+        const defaultLon = 77.5946;
+        let pinLat = defaultLat;
+        let pinLon = defaultLon;
 
-        function loadSample(num) {{
-            document.getElementById('tenderInput').value = samples[num];
+        const map = L.map('reportMap').setView([defaultLat, defaultLon], 13);
+        L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{
+            maxZoom: 19,
+            attribution: '© OpenStreetMap'
+        }}).addTo(map);
+
+        const marker = L.marker([defaultLat, defaultLon], {{ draggable: true }}).addTo(map);
+
+        function updateCoordDisplay(lat, lon) {{
+            pinLat = lat;
+            pinLon = lon;
+            document.getElementById('coordLat').textContent = lat.toFixed(6);
+            document.getElementById('coordLon').textContent = lon.toFixed(6);
         }}
 
-        async function executeAudit() {{
-            const text = document.getElementById('tenderInput').value;
-            if (!text.trim()) {{
-                alert('Please enter or select a tender document text.');
+        marker.on('dragend', function(e) {{
+            const pos = marker.getLatLng();
+            updateCoordDisplay(pos.lat, pos.lng);
+        }});
+
+        map.on('click', function(e) {{
+            marker.setLatLng(e.latlng);
+            updateCoordDisplay(e.latlng.lat, e.latlng.lng);
+        }});
+
+        // Attempt to use the user's current location
+        if (navigator.geolocation) {{
+            navigator.geolocation.getCurrentPosition(function(pos) {{
+                const lat = pos.coords.latitude;
+                const lon = pos.coords.longitude;
+                map.setView([lat, lon], 15);
+                marker.setLatLng([lat, lon]);
+                updateCoordDisplay(lat, lon);
+            }}, function(err) {{
+                // Geolocation denied or unavailable, use default
+                updateCoordDisplay(defaultLat, defaultLon);
+            }});
+        }} else {{
+            updateCoordDisplay(defaultLat, defaultLon);
+        }}
+
+        // Default date to today
+        document.getElementById('reportDate').valueAsDate = new Date();
+
+        // Fix Leaflet map rendering in initially hidden or flexbox containers
+        setTimeout(() => map.invalidateSize(), 200);
+
+        // ---- Submit Community Report ----
+        async function submitReport() {{
+            const title = document.getElementById('reportTitle').value.trim();
+            const desc = document.getElementById('reportDesc').value.trim();
+            const dateVal = document.getElementById('reportDate').value;
+            const btn = document.getElementById('submitBtn');
+            const statusEl = document.getElementById('reportStatus');
+
+            if (!title) {{
+                alert('Please enter a work title.');
                 return;
             }}
+
+            btn.disabled = true;
+            btn.textContent = 'Analyzing satellite imagery...';
+            statusEl.className = 'status-msg processing';
+            statusEl.textContent = '⏳ Fetching satellite imagery and running change detection analysis...';
+
             try {{
-                const resp = await fetch('/api/audit/run', {{
+                const body = {{
+                    title: title,
+                    description: desc,
+                    latitude: pinLat,
+                    longitude: pinLon
+                }};
+                if (dateVal) {{
+                    body.estimated_start_date = dateVal;
+                }}
+
+                const resp = await fetch('/api/community/report', {{
                     method: 'POST',
                     headers: {{ 'Content-Type': 'application/json' }},
-                    body: JSON.stringify({{ tender_text: text }})
+                    body: JSON.stringify(body)
                 }});
                 const data = await resp.json();
+
                 if (data.status === 'success') {{
+                    statusEl.className = 'status-msg success';
+                    statusEl.textContent = '✅ Audit complete — Verdict: ' + data.verdict;
                     window.open(data.evidence_card_url, '_blank');
-                    window.location.reload();
+                    setTimeout(() => window.location.reload(), 2500);
                 }} else {{
-                    alert('Audit error: ' + JSON.stringify(data));
+                    statusEl.className = 'status-msg error';
+                    statusEl.textContent = '❌ ' + (data.detail || JSON.stringify(data));
                 }}
             }} catch (err) {{
-                alert('Audit request failed: ' + err.message);
+                statusEl.className = 'status-msg error';
+                statusEl.textContent = '❌ Request failed: ' + err.message;
+            }} finally {{
+                btn.disabled = false;
+                btn.textContent = 'Run Satellite Audit';
             }}
         }}
 
+        // ---- Scan Tender Folder ----
         async function scanFolder() {{
             const btn = document.getElementById('scanBtn');
             const statusEl = document.getElementById('scanStatus');
 
             btn.disabled = true;
             btn.textContent = 'Scanning...';
-            statusEl.className = 'scan-status processing';
-            statusEl.textContent = '⏳ Scanning tender folder and running satellite audits... This may take a moment.';
+            statusEl.className = 'status-msg processing';
+            statusEl.textContent = '⏳ Scanning tender folder and running satellite audits...';
 
             try {{
                 const resp = await fetch('/api/audit/scan-folder', {{
@@ -669,24 +934,25 @@ def serve_home():
                 const data = await resp.json();
 
                 if (data.status === 'success') {{
-                    statusEl.className = 'scan-status success';
+                    statusEl.className = 'status-msg success';
                     statusEl.textContent = '✅ ' + data.message;
                     setTimeout(() => window.location.reload(), 2000);
                 }} else {{
-                    statusEl.className = 'scan-status error';
+                    statusEl.className = 'status-msg error';
                     statusEl.textContent = '❌ ' + (data.message || JSON.stringify(data));
                 }}
             }} catch (err) {{
-                statusEl.className = 'scan-status error';
+                statusEl.className = 'status-msg error';
                 statusEl.textContent = '❌ Scan failed: ' + err.message;
             }} finally {{
                 btn.disabled = false;
-                btn.textContent = 'Scan & Audit All';
+                btn.textContent = 'Scan & Audit';
             }}
         }}
 
+        // ---- Clear History ----
         async function clearHistory() {{
-            if (!confirm('Are you sure you want to clear all audited project records?')) return;
+            if (!confirm('Clear all audited project records?')) return;
             try {{
                 const resp = await fetch('/api/audit/clear-data', {{ method: 'POST' }});
                 const data = await resp.json();
@@ -700,11 +966,54 @@ def serve_home():
     </script>
 </body>
 </html>
-    """
+        """
         return HTMLResponse(content=html)
     except Exception as e:
         print(f"[App] Error in serve_home: {e}")
         return HTMLResponse(content=f"<html><body style='background:#090d16;color:#ffffff;font-family:sans-serif;padding:2rem;'><h2>Sentra AI Audit Platform</h2><p>Server initialized cleanly. Reload to refresh dashboard.</p><script>setTimeout(() => window.location.reload(), 1500);</script></body></html>")
+
+
+@app.post("/api/community/report")
+def community_report_endpoint(request: CommunityReportRequest):
+    """
+    Accepts a community-submitted infrastructure work report,
+    runs the full satellite audit pipeline, and returns the verdict.
+    """
+    try:
+        report = CommunityReport(
+            title=request.title,
+            description=request.description or "",
+            latitude=request.latitude,
+            longitude=request.longitude,
+            estimated_start_date=request.estimated_start_date
+        )
+
+        print(f"\n[COMMUNITY REPORT] '{report.title}'")
+        print(f"  Location: ({report.latitude}, {report.longitude})")
+        print(f"  Start Date: {report.get_start_date()} | Check Date: {report.get_completion_date()}")
+
+        record, card_res = run_community_report_audit(report)
+        audit_res = record["audit"]
+        tender = record["tender"]
+
+        verdict_map = {
+            "PRIORITY_FIELD_VERIFICATION_RECOMMENDED": "Flagged for Verification",
+            "PARTIAL_CHANGE_DETECTED": "Partial Change Detected",
+            "HIGH_PHYSICAL_CHANGE_VERIFIED": "Verified — Physical Change Confirmed"
+        }
+
+        return {
+            "status": "success",
+            "report_id": tender.tender_id,
+            "verdict": verdict_map.get(audit_res.classification, audit_res.classification),
+            "classification": audit_res.classification,
+            "physical_change": audit_res.physical_alteration_score,
+            "evidence_card_url": f"/reports/{tender.tender_id}/evidence_card.html",
+            "audit_hash": card_res["audit_hash"]
+        }
+    except Exception as e:
+        print(f"[COMMUNITY REPORT ERROR] {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/audit/parse")
