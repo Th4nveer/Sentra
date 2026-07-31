@@ -147,13 +147,19 @@ class EsriWaybackClient:
         except ValueError:
             target_dt = datetime.datetime.now()
 
-        # Gather pre-target baseline hashes across dataset history to detect unchanged legacy tiles
+        # If target date is beyond the latest available release in index, return latest release immediately
+        if target_dt >= self.releases[-1][0]:
+            rel_dt, rel_id, item = self.releases[-1]
+            actual_dt, actual_id = self.get_actual_tile_date(rel_id, x_center, y_center, zoom)
+            return (actual_dt, actual_id, item)
+
+        # Gather pre-target baseline hashes across recent 3 releases to detect unchanged legacy tiles
         exclude_hashes = set()
         if exclude_hash:
             exclude_hashes.add(exclude_hash)
 
         pre_releases = [r for r in self.releases if r[0] < target_dt]
-        for p_dt, p_id, p_item in pre_releases[::-3]:
+        for p_dt, p_id, p_item in pre_releases[-3:]:
             p_hash = self.get_tile_hash(p_id, x_center, y_center, zoom)
             if p_hash:
                 exclude_hashes.add(p_hash)
@@ -170,15 +176,7 @@ class EsriWaybackClient:
                     continue
                 return (actual_dt, actual_id, item)
 
-        # Fallback: check all releases in dataset in reverse chronological order
-        for rel_dt, rel_id, item in reversed(self.releases):
-            actual_dt, actual_id = self.get_actual_tile_date(rel_id, x_center, y_center, zoom)
-            if actual_dt >= target_dt:
-                t_hash = self.get_tile_hash(actual_id, x_center, y_center, zoom)
-                if t_hash and t_hash in exclude_hashes:
-                    continue
-                return (actual_dt, actual_id, item)
-
+        # Fallback: return latest release directly
         rel_dt, rel_id, item = self.releases[-1]
         actual_dt, actual_id = self.get_actual_tile_date(rel_id, x_center, y_center, zoom)
         return (actual_dt, actual_id, item)
@@ -325,24 +323,13 @@ class EsriWaybackClient:
         """
         for attempt in range(retries + 1):
             try:
-                curr_url = tile_url
-                resp = None
-
-                # Follow up to 5 redirect steps to reach actual historical imagery tile
-                for _ in range(5):
-                    resp = requests.get(curr_url, headers=headers, timeout=8, allow_redirects=False)
-                    if resp.status_code in (301, 302, 307, 308) and "Location" in resp.headers:
-                        loc = resp.headers["Location"]
-                        curr_url = "https://wayback.maptiles.arcgis.com" + loc if loc.startswith("/") else loc
-                    else:
-                        break
-
-                if resp is not None and resp.status_code == 200 and len(resp.content) > 500:
+                resp = requests.get(tile_url, headers=headers, timeout=6, allow_redirects=True)
+                if resp.status_code == 200 and len(resp.content) > 500:
                     img = Image.open(io.BytesIO(resp.content)).convert("RGB")
                     return img
             except Exception:
                 pass
-            time.sleep(0.15)
+            time.sleep(0.1)
 
         # Fallback to standard Esri World Imagery server to guarantee complete tile coverage
         try:
