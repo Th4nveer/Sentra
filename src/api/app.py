@@ -46,7 +46,7 @@ class AuditRequest(BaseModel):
     scenario_override: Optional[str] = None
 
 
-from src.report.record_store import save_record, load_all_records
+from src.report.record_store import save_record, load_all_records, clear_all_records
 
 def run_full_audit(
     tender_text: str,
@@ -578,7 +578,10 @@ def serve_home():
                     <div class="hint">Drop PDF, image, or text files into <code>data/raw_tenders/</code> and click scan</div>
                 </div>
                 <span class="pending-badge">{pending_count} pending</span>
-                <button class="btn-scan" id="scanBtn" onclick="scanFolder()">Scan & Audit All</button>
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn-scan" id="scanBtn" onclick="scanFolder()">Scan & Audit All</button>
+                    <button class="btn-sample" style="border-color: var(--accent-red); color: var(--accent-red);" onclick="clearHistory()">Clear History</button>
+                </div>
             </div>
             <div id="scanStatus" class="scan-status"></div>
 
@@ -681,6 +684,19 @@ def serve_home():
                 btn.textContent = 'Scan & Audit All';
             }}
         }}
+
+        async function clearHistory() {{
+            if (!confirm('Are you sure you want to clear all audited project records?')) return;
+            try {{
+                const resp = await fetch('/api/audit/clear-data', {{ method: 'POST' }});
+                const data = await resp.json();
+                if (data.status === 'success') {{
+                    window.location.reload();
+                }}
+            }} catch (err) {{
+                alert('Clear failed: ' + err.message);
+            }}
+        }}
     </script>
 </body>
 </html>
@@ -760,5 +776,19 @@ def scan_folder_endpoint():
             "errors": errors
         }
 
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/audit/clear-data")
+def clear_data_endpoint():
+    """
+    Clears all saved audited project records from the database.
+    """
+    try:
+        clear_all_records()
+        global AUDITED_RECORDS
+        AUDITED_RECORDS = []
+        return {"status": "success", "message": "All audited database records cleared."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

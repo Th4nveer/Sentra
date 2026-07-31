@@ -59,7 +59,14 @@ def load_all_records() -> List[Dict[str, Any]]:
         except Exception as e:
             print(f"[RecordStore] Failed to reconstruct record: {e}")
 
-    return reconstructed
+def clear_all_records() -> None:
+    """
+    Clears all saved records in ./data/audited_records.json.
+    """
+    os.makedirs(os.path.dirname(DB_FILE_PATH), exist_ok=True)
+    with open(DB_FILE_PATH, "w", encoding="utf-8") as f:
+        json.dump([], f)
+    print("[RecordStore] All audited database records cleared.")
 
 
 def _read_raw_db() -> List[Dict[str, Any]]:
