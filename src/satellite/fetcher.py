@@ -64,15 +64,8 @@ class SatelliteFetcher:
             print(f"[SatelliteFetcher] Fetching 'before' satellite crop for start date: {start_date} (using closest floor release <= {start_date})")
             before_crop = self.wayback_client.fetch_satellite_crop(bounding_box, start_date, is_start_date=True)
 
-            # Compute tile hash of baseline before image to ensure after image is a NEW local satellite capture
-            min_lat, min_lon, max_lat, max_lon = bounding_box
-            center_lat, center_lon = (min_lat + max_lat) / 2.0, (min_lon + max_lon) / 2.0
-            x_center, y_center = self.wayback_client.latlon_to_tile(center_lat, center_lon, 15)
-            before_release_info = self.wayback_client.get_floor_release(start_date, x_center, y_center, 15)
-            before_hash = self.wayback_client.get_tile_hash(before_release_info[1], x_center, y_center, 15) if before_release_info else None
-
-            print(f"[SatelliteFetcher] Fetching 'after' satellite crop for date: {buffered_after_date} (completion {completion_date} + {buffer_months}mo buffer, excluding baseline hash {before_hash[:10] if before_hash else 'NONE'})")
-            after_crop = self.wayback_client.fetch_satellite_crop(bounding_box, buffered_after_date, is_start_date=False, zoom_level=15, exclude_hash=before_hash)
+            print(f"[SatelliteFetcher] Fetching 'after' satellite crop for date: {buffered_after_date} (completion {completion_date} + {buffer_months}mo buffer)")
+            after_crop = self.wayback_client.fetch_satellite_crop(bounding_box, buffered_after_date, is_start_date=False, zoom_level=15)
 
             before_arr = before_crop["array_4band"]
             after_arr = after_crop["array_4band"]

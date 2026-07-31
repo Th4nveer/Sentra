@@ -105,9 +105,10 @@ class EsriWaybackClient:
             pass
         return ""
 
-    def get_floor_release(self, date_str: str, x_center: int, y_center: int, zoom: int = 15) -> Optional[Tuple[datetime.datetime, str, Dict[str, Any]]]:
+    def get_floor_release(self, date_str: str, x_center: int = 0, y_center: int = 0, zoom: int = 15) -> Optional[Tuple[datetime.datetime, str, Dict[str, Any]]]:
         """
-        Finds the closest historical release whose ACTUAL local imagery date is <= target start date (Floor Date).
+        Finds the closest historical release with index date <= target start date.
+        Uses local index only — no HTTP verification calls.
         """
         if not self.releases:
             return None
@@ -117,28 +118,26 @@ class EsriWaybackClient:
             target_dt = datetime.datetime.now()
 
         floors = [r for r in self.releases if r[0] <= target_dt]
-        floors.sort(key=lambda x: x[0], reverse=True)
+        if floors:
+            floors.sort(key=lambda x: x[0], reverse=True)
+            rel_dt, rel_id, item = floors[0]
+            return (rel_dt, rel_id, item)
 
-        for rel_dt, rel_id, item in floors:
-            actual_dt, actual_id = self.get_actual_tile_date(rel_id, x_center, y_center, zoom)
-            if actual_dt <= target_dt:
-                return (actual_dt, actual_id, item)
-
+        # All releases are after target — use earliest available
         rel_dt, rel_id, item = self.releases[0]
-        actual_dt, actual_id = self.get_actual_tile_date(rel_id, x_center, y_center, zoom)
-        return (actual_dt, actual_id, item)
+        return (rel_dt, rel_id, item)
 
     def get_ceiling_release(
         self,
         date_str: str,
-        x_center: int,
-        y_center: int,
+        x_center: int = 0,
+        y_center: int = 0,
         zoom: int = 15,
         exclude_hash: Optional[str] = None
     ) -> Optional[Tuple[datetime.datetime, str, Dict[str, Any]]]:
         """
-        Finds the closest historical release whose ACTUAL local imagery date is >= target completion date (Ceiling Date),
-        skipping candidate releases whose tile imagery was already present in pre-target releases.
+        Finds the closest historical release with index date >= target completion date.
+        Uses local index only — no HTTP verification calls.
         """
         if not self.releases:
             return None
@@ -147,39 +146,15 @@ class EsriWaybackClient:
         except ValueError:
             target_dt = datetime.datetime.now()
 
-        # If target date is beyond the latest available release in index, return latest release immediately
-        if target_dt >= self.releases[-1][0]:
-            rel_dt, rel_id, item = self.releases[-1]
-            actual_dt, actual_id = self.get_actual_tile_date(rel_id, x_center, y_center, zoom)
-            return (actual_dt, actual_id, item)
-
-        # Gather pre-target baseline hashes across recent 3 releases to detect unchanged legacy tiles
-        exclude_hashes = set()
-        if exclude_hash:
-            exclude_hashes.add(exclude_hash)
-
-        pre_releases = [r for r in self.releases if r[0] < target_dt]
-        for p_dt, p_id, p_item in pre_releases[-3:]:
-            p_hash = self.get_tile_hash(p_id, x_center, y_center, zoom)
-            if p_hash:
-                exclude_hashes.add(p_hash)
-
         ceilings = [r for r in self.releases if r[0] >= target_dt]
-        ceilings.sort(key=lambda x: x[0])
+        if ceilings:
+            ceilings.sort(key=lambda x: x[0])
+            rel_dt, rel_id, item = ceilings[0]
+            return (rel_dt, rel_id, item)
 
-        for rel_dt, rel_id, item in ceilings:
-            actual_dt, actual_id = self.get_actual_tile_date(rel_id, x_center, y_center, zoom)
-            if actual_dt >= target_dt:
-                t_hash = self.get_tile_hash(actual_id, x_center, y_center, zoom)
-                if t_hash and t_hash in exclude_hashes:
-                    # Skip candidate release if tile is identical to pre-construction baseline
-                    continue
-                return (actual_dt, actual_id, item)
-
-        # Fallback: return latest release directly
+        # All releases are before target — use latest available
         rel_dt, rel_id, item = self.releases[-1]
-        actual_dt, actual_id = self.get_actual_tile_date(rel_id, x_center, y_center, zoom)
-        return (actual_dt, actual_id, item)
+        return (rel_dt, rel_id, item)
 
     def fetch_satellite_crop(
         self,
