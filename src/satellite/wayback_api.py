@@ -48,8 +48,8 @@ class EsriWaybackClient:
         except Exception as e:
             print(f"[EsriWaybackClient] Failed to load Wayback index: {e}")
 
-    def get_closest_release(self, date_str: str) -> Optional[Tuple[datetime.datetime, str, Dict[str, Any]]]:
-        """Finds the closest historical satellite release for a given YYYY-MM-DD date."""
+    def get_floor_release(self, date_str: str) -> Optional[Tuple[datetime.datetime, str, Dict[str, Any]]]:
+        """Finds the closest historical satellite release strictly on or before (<=) target start date (Floor Date)."""
         if not self.releases:
             return None
         try:
@@ -57,19 +57,36 @@ class EsriWaybackClient:
         except ValueError:
             target_dt = datetime.datetime.now()
 
-        closest = min(self.releases, key=lambda x: abs((x[0] - target_dt).total_seconds()))
-        return closest
+        floors = [r for r in self.releases if r[0] <= target_dt]
+        if floors:
+            return max(floors, key=lambda x: x[0])
+        return self.releases[0]
+
+    def get_ceiling_release(self, date_str: str) -> Optional[Tuple[datetime.datetime, str, Dict[str, Any]]]:
+        """Finds the closest historical satellite release strictly on or after (>=) target completion date (Ceiling Date)."""
+        if not self.releases:
+            return None
+        try:
+            target_dt = datetime.datetime.strptime(date_str, "%Y-%m-%d")
+        except ValueError:
+            target_dt = datetime.datetime.now()
+
+        ceilings = [r for r in self.releases if r[0] >= target_dt]
+        if ceilings:
+            return min(ceilings, key=lambda x: x[0])
+        return self.releases[-1]
 
     def fetch_satellite_crop(
         self,
         bounding_box: list,
         date_str: str,
+        is_start_date: bool = True,
         zoom_level: int = 16,
         grid_size: int = 3
     ) -> Dict[str, Any]:
         """
-        Fetches a high-definition multi-tile ($3 \\times 3$ grid) satellite mosaic from Esri World Imagery Wayback
-        for the given lat/lon bounding box & date at Zoom Level 16 (~2.3m/pixel resolution).
+        Fetches a high-definition multi-tile ($3 \\times 3$ grid) satellite mosaic from Esri World Imagery Wayback.
+        Start dates use the closest floor release (<= date); completion dates use closest ceiling release (>= date).
         """
         min_lat, min_lon, max_lat, max_lon = bounding_box
         center_lat = (min_lat + max_lat) / 2.0
@@ -77,7 +94,10 @@ class EsriWaybackClient:
 
         x_center, y_center = self.latlon_to_tile(center_lat, center_lon, zoom_level)
 
-        release_info = self.get_closest_release(date_str)
+        if is_start_date:
+            release_info = self.get_floor_release(date_str)
+        else:
+            release_info = self.get_ceiling_release(date_str)
         if release_info:
             rel_dt, rel_id, rel_item = release_info
             actual_date_str = rel_dt.strftime("%Y-%m-%d")

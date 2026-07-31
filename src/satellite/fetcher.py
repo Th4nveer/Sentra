@@ -60,12 +60,12 @@ class SatelliteFetcher:
             after_img = Image.fromarray((after_arr[:, :, :3] * 255).astype(np.uint8))
             source_name = "PlanetScope-Synthetic Multispectral Baseline"
         else:
-            # Real satellite imagery query via Esri World Imagery Wayback
-            print(f"[SatelliteFetcher] Fetching 'before' satellite crop for start date: {start_date}")
-            before_crop = self.wayback_client.fetch_satellite_crop(bounding_box, start_date)
+            # Real satellite imagery query via Esri World Imagery Wayback (Floor date for start, Ceiling date for completion)
+            print(f"[SatelliteFetcher] Fetching 'before' satellite crop for start date: {start_date} (using closest floor release <= {start_date})")
+            before_crop = self.wayback_client.fetch_satellite_crop(bounding_box, start_date, is_start_date=True)
 
-            print(f"[SatelliteFetcher] Fetching 'after' satellite crop for date: {buffered_after_date} (completion {completion_date} + {buffer_months}mo buffer)")
-            after_crop = self.wayback_client.fetch_satellite_crop(bounding_box, buffered_after_date)
+            print(f"[SatelliteFetcher] Fetching 'after' satellite crop for date: {buffered_after_date} (completion {completion_date} + {buffer_months}mo buffer, using closest ceiling release >= {buffered_after_date})")
+            after_crop = self.wayback_client.fetch_satellite_crop(bounding_box, buffered_after_date, is_start_date=False)
 
             before_arr = before_crop["array_4band"]
             after_arr = after_crop["array_4band"]
