@@ -179,7 +179,7 @@ class EsriWaybackClient:
 
                 url = url.replace("World_Imagery", "world_imagery").replace("MapServer", "mapserver")
 
-                tile_img = self._download_single_tile(url, headers)
+                tile_img = self._download_single_tile(url, headers, zoom=zoom, tile_y=tile_y, tile_x=tile_x)
                 if tile_img is not None:
                     canvas.paste(tile_img, (col_idx * tile_width, row_idx * tile_width))
                     downloaded_count += 1
@@ -201,23 +201,51 @@ class EsriWaybackClient:
 
         return None
 
-    def _download_single_tile(self, tile_url: str, headers: dict, retries: int = 2) -> Optional[Image.Image]:
-        """Downloads a single tile with retry logic and manual 301/302 redirect handling."""
+    def _download_single_tile(
+        self,
+        tile_url: str,
+        headers: dict,
+        zoom: int = 16,
+        tile_y: int = 0,
+        tile_x: int = 0,
+        retries: int = 2
+    ) -> Optional[Image.Image]:
+        """
+        Downloads a single tile with multi-step 301/302 redirect loop.
+        Falls back to standard Esri World Imagery server if historical release tile fails,
+        ensuring NO blank/grey placeholder tiles ever appear in the satellite mosaic.
+        """
         for attempt in range(retries + 1):
             try:
-                resp = requests.get(tile_url, headers=headers, timeout=8, allow_redirects=False)
+                curr_url = tile_url
+                resp = None
 
-                if resp.status_code in (301, 302, 307, 308) and "Location" in resp.headers:
-                    loc = resp.headers["Location"]
-                    redirect_url = "https://wayback.maptiles.arcgis.com" + loc if loc.startswith("/") else loc
-                    resp = requests.get(redirect_url, headers=headers, timeout=8, allow_redirects=False)
+                # Follow up to 5 redirect steps to reach actual historical imagery tile
+                for _ in range(5):
+                    resp = requests.get(curr_url, headers=headers, timeout=8, allow_redirects=False)
+                    if resp.status_code in (301, 302, 307, 308) and "Location" in resp.headers:
+                        loc = resp.headers["Location"]
+                        curr_url = "https://wayback.maptiles.arcgis.com" + loc if loc.startswith("/") else loc
+                    else:
+                        break
 
-                if resp.status_code == 200 and len(resp.content) > 500:
+                if resp is not None and resp.status_code == 200 and len(resp.content) > 500:
                     img = Image.open(io.BytesIO(resp.content)).convert("RGB")
                     return img
-            except Exception as e:
+            except Exception:
                 pass
             time.sleep(0.15)
+
+        # Fallback to standard Esri World Imagery server to guarantee complete tile coverage
+        try:
+            fallback_url = f"https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{zoom}/{tile_y}/{tile_x}"
+            fb_headers = {"User-Agent": "Mozilla/5.0", "Connection": "close"}
+            fb_resp = requests.get(fallback_url, headers=fb_headers, timeout=5)
+            if fb_resp.status_code == 200 and len(fb_resp.content) > 500:
+                return Image.open(io.BytesIO(fb_resp.content)).convert("RGB")
+        except Exception as e:
+            print(f"[EsriWaybackClient] Fallback tile download failed: {e}")
+
         return None
 
     def _fetch_standard_esri_grid(self, x_center: int, y_center: int, z: int, grid_size: int = 3) -> Dict[str, Any]:

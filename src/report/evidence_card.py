@@ -349,12 +349,12 @@ class EvidenceCardGenerator:
                 <h3 style="margin-bottom: 0.75rem; font-size:0.9rem; color:var(--muted);">SPECTRAL CHANGE ANALYSIS (RGB+NIR)</h3>
                 <div class="image-box">
                     <img src="data:image/png;base64,{{ heatmap_b64 }}" alt="Spectral Shift Heatmap">
-                    <div class="label">Planet Scope Δ NDBI & Shift Map</div>
+                    <div class="label">Multispectral Δ NDBI & Shift Map</div>
                 </div>
             </div>
         </div>
 
-        <h3 style="margin-bottom: 0.75rem; font-size:0.9rem; color:var(--muted);">DUAL-TEMPORAL SATELLITE COMPARISON (Planet-NICFI ~4.7m)</h3>
+        <h3 style="margin-bottom: 0.75rem; font-size:0.9rem; color:var(--muted);">DUAL-TEMPORAL SATELLITE COMPARISON ({{ sat_data.source }})</h3>
         <div class="grid-2">
             <div class="image-box">
                 <img src="data:image/png;base64,{{ before_b64 }}" alt="Pre-Project Satellite Crop">
