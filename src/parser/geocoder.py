@@ -13,18 +13,20 @@ load_dotenv()
 
 # Built-in fallback registry for municipal wards, landmarks, and city locations
 LOCAL_GEO_REGISTRY: Dict[str, Dict[str, float]] = {
-    "ward 12 main connector road": {"lat": 12.9352, "lon": 77.6245, "address": "Ward 12 Main Connector Road, Outer Ring Road, Bellandur, Bengaluru, Karnataka 560103"},
-    "bellandur outer ring road": {"lat": 12.9352, "lon": 77.6245, "address": "Outer Ring Road, Bellandur, Bengaluru, Karnataka"},
+    "bellandur lake": {"lat": 12.9333, "lon": 77.6637, "address": "Bellandur Lake, Bengaluru, Karnataka 560103"},
+    "bellandur": {"lat": 12.9333, "lon": 77.6637, "address": "Bellandur Lake, Bengaluru, Karnataka 560103"},
+    "ward 12 main connector road": {"lat": 12.9333, "lon": 77.6637, "address": "Bellandur Lake, Bengaluru, Karnataka 560103"},
+    "bellandur outer ring road": {"lat": 12.9333, "lon": 77.6637, "address": "Bellandur Lake, Bengaluru, Karnataka 560103"},
+    "bengaluru ward 12": {"lat": 12.9333, "lon": 77.6637, "address": "Bellandur Lake, Bengaluru, Karnataka 560103"},
     "sector 4 civic park": {"lat": 28.5355, "lon": 77.3910, "address": "Sector 4 Civic Park, Noida, Uttar Pradesh 201301"},
     "noida sector 4": {"lat": 28.5355, "lon": 77.3910, "address": "Sector 4, Noida, Uttar Pradesh"},
     "hosur main road drainage": {"lat": 12.9116, "lon": 77.6389, "address": "Hosur Main Road, Kudlu Gate Signal, Bengaluru, Karnataka 560068"},
-    "bengaluru ward 12": {"lat": 12.9352, "lon": 77.6245, "address": "Ward 12, Bellandur, Bengaluru, Karnataka"},
     "mumbai bkc connector": {"lat": 19.0657, "lon": 72.8687, "address": "Bandra Kurla Complex, Mumbai, Maharashtra"},
     "gachibowli flyover": {"lat": 17.4401, "lon": 78.3489, "address": "Gachibowli, Hyderabad, Telangana"},
 }
 
-DEFAULT_LAT = 12.9352
-DEFAULT_LON = 77.6245
+DEFAULT_LAT = 12.9333
+DEFAULT_LON = 77.6637
 
 
 class Geocoder:
@@ -52,7 +54,9 @@ class Geocoder:
 
         # 2. Check local registry match first for speed & offline reliability
         loc_lower = location_text.lower()
-        for key, info in LOCAL_GEO_REGISTRY.items():
+        sorted_keys = sorted(LOCAL_GEO_REGISTRY.keys(), key=len, reverse=True)
+        for key in sorted_keys:
+            info = LOCAL_GEO_REGISTRY[key]
             # Require the full key to appear in the text, or at least 2 distinctive words (3+ chars)
             if key in loc_lower:
                 lat, lon = info["lat"], info["lon"]

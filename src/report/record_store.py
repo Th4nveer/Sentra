@@ -64,6 +64,8 @@ def load_all_records() -> List[Dict[str, Any]]:
         except Exception as e:
             print(f"[RecordStore] Failed to reconstruct record: {e}")
 
+    return reconstructed
+
 def clear_all_records() -> None:
     """
     Clears all saved records in ./data/audited_records.json.

@@ -14,7 +14,7 @@ Work Commencement Date: 2024-01-15
 Stipulated Completion Date: 2024-06-30
 
 Site Location: Ward 12 Main Connector Road, Outer Ring Road, Bellandur, Bengaluru, Karnataka 560103
-Coordinates / ROI: 12.9352, 77.6245
+Coordinates / ROI: 12.9333, 77.6637
 
 Scope of Work: Complete asphalt scraping, bituminous hot-mix overlay paving, road marking, and curb stone painting along the 2.4 km Ward 12 corridor.
 

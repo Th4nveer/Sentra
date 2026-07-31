@@ -354,15 +354,15 @@ class EvidenceCardGenerator:
             </div>
         </div>
 
-        <h3 style="margin-bottom: 0.75rem; font-size:0.9rem; color:var(--muted);">DUAL-TEMPORAL SATELLITE COMPARISON ({{ sat_data.source }})</h3>
+        <h3 style="margin-bottom: 0.75rem; font-size:0.9rem; color:var(--muted);">DUAL-TEMPORAL SATELLITE COMPARISON ({{ sat_data.source if sat_data else 'Esri World Imagery' }})</h3>
         <div class="grid-2">
             <div class="image-box">
                 <img src="data:image/png;base64,{{ before_b64 }}" alt="Pre-Project Satellite Crop">
-                <div class="label">BEFORE: {{ tender.start_date }}</div>
+                <div class="label">BEFORE: {{ sat_data.before_date if sat_data and sat_data.before_date else tender.start_date }}</div>
             </div>
             <div class="image-box">
                 <img src="data:image/png;base64,{{ after_b64 }}" alt="Post-Project Satellite Crop">
-                <div class="label">AFTER: {{ tender.completion_date }}</div>
+                <div class="label">AFTER: {{ sat_data.after_date if sat_data and sat_data.after_date else tender.completion_date }}</div>
             </div>
         </div>
 

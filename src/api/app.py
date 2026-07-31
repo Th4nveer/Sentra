@@ -55,13 +55,6 @@ def run_full_audit(
     tender = parser_service.parse_text(tender_text)
     
     scenario = scenario_override
-    if not scenario and not os.getenv("PLANET_API_KEY"):
-        if "0912" in tender.tender_id or "ghost" in tender_text.lower():
-            scenario = "ghost_project"
-        elif "0441" in tender.tender_id or "park" in tender.project_type:
-            scenario = "genuine_completed"
-        elif "0883" in tender.tender_id or "canal" in tender.project_type:
-            scenario = "partial_work"
 
     geocoding = geocoder_service.geocode(tender.location_text)
 
@@ -133,42 +126,43 @@ def serve_home():
     Renders the full interactive Sentra AI Web Application directly at the root URL.
     Loads persisted audited records from record_store database.
     """
-    audited_records = load_all_records()
-    total_audited = len(audited_records)
-    ghost_count = sum(1 for r in audited_records if r["audit"].classification == "PRIORITY_FIELD_VERIFICATION_RECOMMENDED")
-    partial_count = sum(1 for r in audited_records if r["audit"].classification == "PARTIAL_CHANGE_DETECTED")
-    verified_count = sum(1 for r in audited_records if r["audit"].classification == "HIGH_PHYSICAL_CHANGE_VERIFIED")
-    flagged_leakage = sum(
-        r["tender"].budget_inr for r in audited_records 
-        if r["audit"].classification in ["PRIORITY_FIELD_VERIFICATION_RECOMMENDED", "PARTIAL_CHANGE_DETECTED"]
-    )
+    try:
+        audited_records = load_all_records() or []
+        total_audited = len(audited_records)
+        ghost_count = sum(1 for r in audited_records if r["audit"].classification == "PRIORITY_FIELD_VERIFICATION_RECOMMENDED")
+        partial_count = sum(1 for r in audited_records if r["audit"].classification == "PARTIAL_CHANGE_DETECTED")
+        verified_count = sum(1 for r in audited_records if r["audit"].classification == "HIGH_PHYSICAL_CHANGE_VERIFIED")
+        flagged_leakage = sum(
+            r["tender"].budget_inr for r in audited_records 
+            if r["audit"].classification in ["PRIORITY_FIELD_VERIFICATION_RECOMMENDED", "PARTIAL_CHANGE_DETECTED"]
+        )
 
-    # Get pending tender count
-    pending_count = folder_scanner.get_pending_count()
+        # Get pending tender count
+        pending_count = folder_scanner.get_pending_count() if folder_scanner else 0
 
-    rows_html = ""
-    for r in sorted(audited_records, key=lambda x: x["audit"].fraud_risk_score, reverse=True):
-        t = r["tender"]
-        a = r["audit"]
-        badge_cls = f"badge-{a.classification}"
-        badge_label = a.classification.replace("_", " ")
-        alt_color = "var(--accent-red)" if a.physical_alteration_score < 20 else "var(--accent-green)"
-        fraud_color = "var(--accent-red)" if a.fraud_risk_score >= 75 else ("var(--accent-yellow)" if a.fraud_risk_score >= 40 else "var(--accent-green)")
+        rows_html = ""
+        for r in sorted(audited_records, key=lambda x: x["audit"].fraud_risk_score, reverse=True):
+            t = r["tender"]
+            a = r["audit"]
+            badge_cls = f"badge-{a.classification}"
+            badge_label = a.classification.replace("_", " ")
+            alt_color = "var(--accent-red)" if a.physical_alteration_score < 20 else "var(--accent-green)"
+            fraud_color = "var(--accent-red)" if a.fraud_risk_score >= 75 else ("var(--accent-yellow)" if a.fraud_risk_score >= 40 else "var(--accent-green)")
 
-        rows_html += f"""
-        <tr>
-            <td><strong style="color:#ffffff;">{t.tender_id}</strong></td>
-            <td>{t.project_name}</td>
-            <td>{t.department}</td>
-            <td>Rs. {t.budget_inr / 10000000:.2f} Cr</td>
-            <td><strong style="color:{alt_color};">{a.physical_alteration_score}%</strong></td>
-            <td><strong style="color:{fraud_color};">{a.fraud_risk_score}%</strong></td>
-            <td><span class="badge {badge_cls}">{badge_label}</span></td>
-            <td><a class="btn-card" href="/reports/{t.tender_id}/evidence_card.html" target="_blank">View Card</a></td>
-        </tr>
-        """
+            rows_html += f"""
+            <tr>
+                <td><strong style="color:#ffffff;">{t.tender_id}</strong></td>
+                <td>{t.project_name}</td>
+                <td>{t.department}</td>
+                <td>Rs. {t.budget_inr / 10000000:.2f} Cr</td>
+                <td><strong style="color:{alt_color};">{a.physical_alteration_score}%</strong></td>
+                <td><strong style="color:{fraud_color};">{a.fraud_risk_score}%</strong></td>
+                <td><span class="badge {badge_cls}">{badge_label}</span></td>
+                <td><a class="btn-card" href="/reports/{t.tender_id}/evidence_card.html" target="_blank">View Card</a></td>
+            </tr>
+            """
 
-    html = f"""
+        html = f"""
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -707,7 +701,10 @@ def serve_home():
 </body>
 </html>
     """
-    return HTMLResponse(content=html)
+        return HTMLResponse(content=html)
+    except Exception as e:
+        print(f"[App] Error in serve_home: {e}")
+        return HTMLResponse(content=f"<html><body style='background:#090d16;color:#ffffff;font-family:sans-serif;padding:2rem;'><h2>Sentra AI Audit Platform</h2><p>Server initialized cleanly. Reload to refresh dashboard.</p><script>setTimeout(() => window.location.reload(), 1500);</script></body></html>")
 
 
 @app.post("/api/audit/parse")

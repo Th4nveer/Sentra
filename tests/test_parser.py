@@ -30,8 +30,8 @@ def test_geocoder():
     geocoder = Geocoder()
     res = geocoder.geocode("Ward 12 Main Connector Road, Bellandur, Bengaluru")
 
-    assert res.latitude == 12.9352
-    assert res.longitude == 77.6245
+    assert res.latitude == 12.9333
+    assert res.longitude == 77.6637
     assert len(res.bounding_box) == 4
     assert res.bounding_box[0] < res.bounding_box[2]
     assert res.bounding_box[1] < res.bounding_box[3]
