@@ -91,11 +91,9 @@ class EsriWaybackClient:
             if actual_dt <= target_dt:
                 return (actual_dt, actual_id, item)
 
-        if floors:
-            rel_dt, rel_id, item = floors[0]
-            actual_dt, actual_id = self.get_actual_tile_date(rel_id, x_center, y_center, zoom)
-            return (actual_dt, actual_id, item)
-        return self.releases[0]
+        rel_dt, rel_id, item = self.releases[0]
+        actual_dt, actual_id = self.get_actual_tile_date(rel_id, x_center, y_center, zoom)
+        return (actual_dt, actual_id, item)
 
     def get_ceiling_release(self, date_str: str, x_center: int, y_center: int, zoom: int = 16) -> Optional[Tuple[datetime.datetime, str, Dict[str, Any]]]:
         """
@@ -116,11 +114,15 @@ class EsriWaybackClient:
             if actual_dt >= target_dt:
                 return (actual_dt, actual_id, item)
 
-        if ceilings:
-            rel_dt, rel_id, item = ceilings[-1]
+        # Fallback: check all releases in dataset in reverse chronological order
+        for rel_dt, rel_id, item in reversed(self.releases):
             actual_dt, actual_id = self.get_actual_tile_date(rel_id, x_center, y_center, zoom)
-            return (actual_dt, actual_id, item)
-        return self.releases[-1]
+            if actual_dt >= target_dt:
+                return (actual_dt, actual_id, item)
+
+        rel_dt, rel_id, item = self.releases[-1]
+        actual_dt, actual_id = self.get_actual_tile_date(rel_id, x_center, y_center, zoom)
+        return (actual_dt, actual_id, item)
 
     def fetch_satellite_crop(
         self,
