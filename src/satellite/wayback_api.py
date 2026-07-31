@@ -48,8 +48,34 @@ class EsriWaybackClient:
         except Exception as e:
             print(f"[EsriWaybackClient] Failed to load Wayback index: {e}")
 
-    def get_floor_release(self, date_str: str) -> Optional[Tuple[datetime.datetime, str, Dict[str, Any]]]:
-        """Finds the closest historical satellite release strictly on or before (<=) target start date (Floor Date)."""
+    def get_actual_tile_date(self, rel_id: str, x_tile: int, y_tile: int, zoom: int = 16) -> Tuple[datetime.datetime, str]:
+        """
+        Queries the actual underlying satellite imagery capture date for a tile coordinate by following 301 redirects.
+        Returns (actual_dt, actual_rel_id).
+        """
+        if not hasattr(self, "_release_map"):
+            self._release_map = {rel_id: dt for dt, rel_id, _ in self.releases}
+
+        url = f"https://wayback.maptiles.arcgis.com/arcgis/rest/services/world_imagery/wmts/1.0.0/default028mm/mapserver/tile/{rel_id}/{zoom}/{y_tile}/{x_tile}"
+        headers = {"User-Agent": "Mozilla/5.0", "Connection": "close"}
+        try:
+            r = requests.get(url, headers=headers, allow_redirects=False, timeout=4)
+            if r.status_code in (301, 302, 307, 308) and "Location" in r.headers:
+                loc = r.headers["Location"]
+                parts = loc.split("/")
+                if "tile" in parts:
+                    idx = parts.index("tile")
+                    target_id = parts[idx + 1]
+                    if target_id in self._release_map:
+                        return self._release_map[target_id], target_id
+        except Exception:
+            pass
+        return self._release_map.get(rel_id, datetime.datetime.now()), rel_id
+
+    def get_floor_release(self, date_str: str, x_center: int, y_center: int, zoom: int = 16) -> Optional[Tuple[datetime.datetime, str, Dict[str, Any]]]:
+        """
+        Finds the closest historical release whose ACTUAL local imagery date is <= target start date (Floor Date).
+        """
         if not self.releases:
             return None
         try:
@@ -58,12 +84,23 @@ class EsriWaybackClient:
             target_dt = datetime.datetime.now()
 
         floors = [r for r in self.releases if r[0] <= target_dt]
+        floors.sort(key=lambda x: x[0], reverse=True)
+
+        for rel_dt, rel_id, item in floors:
+            actual_dt, actual_id = self.get_actual_tile_date(rel_id, x_center, y_center, zoom)
+            if actual_dt <= target_dt:
+                return (actual_dt, actual_id, item)
+
         if floors:
-            return max(floors, key=lambda x: x[0])
+            rel_dt, rel_id, item = floors[0]
+            actual_dt, actual_id = self.get_actual_tile_date(rel_id, x_center, y_center, zoom)
+            return (actual_dt, actual_id, item)
         return self.releases[0]
 
-    def get_ceiling_release(self, date_str: str) -> Optional[Tuple[datetime.datetime, str, Dict[str, Any]]]:
-        """Finds the closest historical satellite release strictly on or after (>=) target completion date (Ceiling Date)."""
+    def get_ceiling_release(self, date_str: str, x_center: int, y_center: int, zoom: int = 16) -> Optional[Tuple[datetime.datetime, str, Dict[str, Any]]]:
+        """
+        Finds the closest historical release whose ACTUAL local imagery date is >= target completion date (Ceiling Date).
+        """
         if not self.releases:
             return None
         try:
@@ -72,8 +109,17 @@ class EsriWaybackClient:
             target_dt = datetime.datetime.now()
 
         ceilings = [r for r in self.releases if r[0] >= target_dt]
+        ceilings.sort(key=lambda x: x[0])
+
+        for rel_dt, rel_id, item in ceilings:
+            actual_dt, actual_id = self.get_actual_tile_date(rel_id, x_center, y_center, zoom)
+            if actual_dt >= target_dt:
+                return (actual_dt, actual_id, item)
+
         if ceilings:
-            return min(ceilings, key=lambda x: x[0])
+            rel_dt, rel_id, item = ceilings[-1]
+            actual_dt, actual_id = self.get_actual_tile_date(rel_id, x_center, y_center, zoom)
+            return (actual_dt, actual_id, item)
         return self.releases[-1]
 
     def fetch_satellite_crop(
@@ -95,9 +141,9 @@ class EsriWaybackClient:
         x_center, y_center = self.latlon_to_tile(center_lat, center_lon, zoom_level)
 
         if is_start_date:
-            release_info = self.get_floor_release(date_str)
+            release_info = self.get_floor_release(date_str, x_center, y_center, zoom_level)
         else:
-            release_info = self.get_ceiling_release(date_str)
+            release_info = self.get_ceiling_release(date_str, x_center, y_center, zoom_level)
         if release_info:
             rel_dt, rel_id, rel_item = release_info
             actual_date_str = rel_dt.strftime("%Y-%m-%d")
