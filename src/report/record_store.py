@@ -22,6 +22,11 @@ def save_record(record: Dict[str, Any]) -> None:
     tender = record["tender"]
     tender_id = tender.tender_id if hasattr(tender, "tender_id") else tender.get("tender_id")
 
+    # Ignore default offline fallback ID to prevent network-failed parses from cluttering DB
+    if tender_id == "TND-2024-DEF-001":
+        print("[RecordStore] Skipping database save for default fallback record.")
+        return
+
     serialized = {
         "tender": tender.model_dump() if hasattr(tender, "model_dump") else tender,
         "geocoding": record["geocoding"].model_dump() if hasattr(record["geocoding"], "model_dump") else record["geocoding"],
