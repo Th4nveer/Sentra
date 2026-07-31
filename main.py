@@ -247,21 +247,27 @@ def main():
         import uvicorn
         import socket
 
-        def is_port_free(host: str, p: int) -> bool:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                return s.connect_ex((host, p)) != 0
+        def is_port_available(p: int) -> bool:
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.bind(("127.0.0.1", p))
+                    return True
+            except OSError:
+                return False
 
         target_port = args.port
-        if not is_port_free("127.0.0.1", target_port):
-            if target_port == 8000:
-                print(f"[!] Port 8000 is occupied by another service.")
-                if is_port_free("127.0.0.1", 8080):
-                    target_port = 8080
-                else:
-                    target_port = 8081
-                print(f"[!] Automatically redirecting Sentra to http://127.0.0.1:{target_port}")
+        if target_port == 8000:
+            target_port = 8050  # Default to 8050 to avoid generic 8000 conflicts
 
-        print(f"Starting Sentra Web App on http://127.0.0.1:{target_port}...")
+        if not is_port_available(target_port):
+            for candidate in [8050, 8085, 8888, 9000, 9090]:
+                if is_port_available(candidate):
+                    target_port = candidate
+                    break
+
+        print(f"\n" + "=" * 60)
+        print(f"  SENTRA AI WEB APP LIVE AT: http://127.0.0.1:{target_port}")
+        print("=" * 60 + "\n")
         uvicorn.run("src.api.app:app", host="127.0.0.1", port=target_port, reload=False)
 
 
