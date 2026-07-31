@@ -1,0 +1,31 @@
+# Environment & Keys
+.env
+*.env
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.venv/
+venv/
+ENV/
+
+# Data & Satellite Cache
+data/satellite_cache/
+data/satellite_crops/
+data/raw_tenders/*
+!data/raw_tenders/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+data/reports/*
+!data/reports/.gitkeep
+data/audited_records.json
+
+# IDE & System
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
