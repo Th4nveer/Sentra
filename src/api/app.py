@@ -21,7 +21,7 @@ from src.report.triage_dashboard import TriageDashboardGenerator
 app = FastAPI(
     title="Sentra AI Satellite Audit API & Dashboard",
     description="Automated space-borne AI satellite audit platform for public infrastructure",
-    version="2.2.0"
+    version="2.3.0"
 )
 
 # Ensure directories exist and mount static files
@@ -43,6 +43,17 @@ folder_scanner = FolderScanner()
 
 # In-memory store for audited records
 AUDITED_RECORDS = []
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    for ext in ["ico", "png", "svg", "jpeg", "jpg", "webp"]:
+        logo_path = f"./static/logo.{ext}"
+        if os.path.exists(logo_path):
+            media_type = "image/x-icon" if ext == "ico" else f"image/{ext}"
+            return FileResponse(logo_path, media_type=media_type)
+    from fastapi.responses import Response
+    return Response(status_code=204)
 
 
 class AuditRequest(BaseModel):
@@ -180,9 +191,9 @@ def startup_event():
 @app.get("/", response_class=HTMLResponse)
 def serve_home():
     """
-    Renders the interactive Sentra AI Web Dashboard.
-    Supports community reporting, interactive map, direct tender document file uploads (PDF, images, TXT),
-    and satellite audit evidence cards.
+    Renders the EXLM-themed Sentra AI Web Dashboard.
+    Light, clean, high-contrast fintech aesthetic with sidebar navigation,
+    soft pastel metric cards, interactive map, file upload dropzone, and sleek audit log.
     """
     try:
         audited_records = load_all_records() or []
@@ -195,12 +206,12 @@ def serve_home():
         pending_count = folder_scanner.get_pending_count() if folder_scanner else 0
 
         # Check for custom logo file in ./static/
-        logo_html = '<div class="brand-icon">S</div>'
+        logo_html = '<div class="brand-icon" style="width:52px;height:52px;background:#0f172a;color:#fff;border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1.4rem;">S</div>'
         for ext in ["png", "svg", "jpg", "jpeg", "webp"]:
             logo_path = f"./static/logo.{ext}"
             if os.path.exists(logo_path):
                 mtime = int(os.path.getmtime(logo_path))
-                logo_html = f'<img src="/static/logo.{ext}?v={mtime}" alt="Logo" class="brand-logo-img" style="height: 56px; width: auto; max-width: 260px; object-fit: contain; border-radius: 8px;" />'
+                logo_html = f'<img src="/static/logo.{ext}?v={mtime}" alt="Sentra Logo" class="brand-logo-img" style="height: 68px; width: auto; max-width: 320px; object-fit: contain; border-radius: 8px;" />'
                 break
 
         rows_html = ""
@@ -221,7 +232,7 @@ def serve_home():
             if len(location_display) > 55:
                 location_display = location_display[:52] + "..."
             
-            source_tag = "👥 Citizen Report" if t.tender_id.startswith("CR-") else "📄 Tender Doc"
+            source_tag = "👥 Citizen" if t.tender_id.startswith("CR-") else "📄 Tender"
 
             rows_html += f"""
             <tr>
@@ -242,44 +253,89 @@ def serve_home():
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SENTRA · Space-Borne Satellite Audit</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         :root {{
-            --bg: #090d16;
-            --surface: #111827;
-            --surface-subtle: #1f2937;
-            --border: rgba(255, 255, 255, 0.08);
-            --border-hover: rgba(255, 255, 255, 0.16);
-            --accent: #6366f1;
-            --accent-glow: rgba(99, 102, 241, 0.25);
-            --accent-cyan: #06b6d4;
-            --accent-green: #10b981;
-            --accent-red: #f43f5e;
-            --accent-amber: #f59e0b;
-            --text-primary: #f9fafb;
-            --text-secondary: #9ca3af;
-            --text-tertiary: #6b7280;
+            --bg: #f8fafc;
+            --sidebar-bg: #ffffff;
+            --card-bg: #ffffff;
+            --border: #e2e8f0;
+            --border-hover: #cbd5e1;
+            --text-heading: #0f172a;
+            --text-body: #334155;
+            --text-muted: #64748b;
+            --text-light: #94a3b8;
+            --accent-dark: #0f172a;
+            --accent-dark-hover: #1e293b;
+            --accent-blue: #2563eb;
+            --accent-green: #16a34a;
+            --accent-red: #dc2626;
+            --accent-amber: #d97706;
         }}
 
         * {{ box-sizing: border-box; margin: 0; padding: 0; }}
         body {{
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
             background-color: var(--bg);
-            color: var(--text-primary);
-            padding: 1.5rem 2rem;
+            color: var(--text-body);
             line-height: 1.5;
             -webkit-font-smoothing: antialiased;
+            display: flex;
+            min-height: 100vh;
+          /* ---- Header Navbar ---- */
+        .brand-group {{
+            display: flex;
+            align-items: center;
+            gap: 16px;
         }}
 
+        .brand-title {{
+            font-size: 1.85rem;
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            color: var(--text-heading);
+            line-height: 1.1;
+        }}
+
+        .brand-sub {{
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            font-weight: 500;
+            margin-top: 2px;
+        }}
+
+        .status-badge {{
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            border-radius: 9999px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: #166534;
+        }}
+
+        .status-dot {{
+            width: 7px;
+            height: 7px;
+            background: var(--accent-green);
+            border-radius: 50%;
+            box-shadow: 0 0 6px rgba(22, 163, 74, 0.4);
+        }}
+
+        /* ---- Main Workspace Layout ---- */
         .container {{
             width: 100%;
             max-width: 100%;
-            margin: 0 auto;
+            margin: 0;
+            padding: 1.5rem 2rem;
         }}
 
-        /* ---- Header Bar ---- */
-        .navbar {{
+        /* Top Bar Navigation */
+        .topbar {{
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -288,118 +344,79 @@ def serve_home():
             border-bottom: 1px solid var(--border);
         }}
 
-        .brand-group {{
+        .topbar-actions {{
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 14px;
         }}
 
-        .brand-icon {{
-            width: 38px;
-            height: 38px;
-            background: linear-gradient(135deg, #6366f1 0%, #06b6d4 100%);
-            border-radius: 9px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            font-size: 1.1rem;
-            color: #ffffff;
-            box-shadow: 0 0 20px var(--accent-glow);
-        }}
-
-        .brand-title {{
-            font-size: 1.35rem;
-            font-weight: 700;
-            letter-spacing: -0.02em;
-            color: #ffffff;
-        }}
-
-        .brand-sub {{
-            font-size: 0.75rem;
-            color: var(--text-secondary);
-            font-weight: 400;
-        }}
-
-        .status-badge {{
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 6px 14px;
-            background: rgba(16, 185, 129, 0.08);
-            border: 1px solid rgba(16, 185, 129, 0.25);
-            border-radius: 9999px;
-            font-size: 0.78rem;
-            font-weight: 500;
-            color: var(--accent-green);
-        }}
-
-        .status-dot {{
-            width: 6px;
-            height: 6px;
-            background: var(--accent-green);
-            border-radius: 50%;
-            box-shadow: 0 0 8px var(--accent-green);
-        }}
-
-        /* ---- Metrics Overview ---- */
+        /* ---- Metrics Grid ---- */
         .stats-grid {{
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: 1rem;
+            gap: 1.25rem;
             margin-bottom: 2rem;
         }}
 
         .stat-card {{
-            background: var(--surface);
+            border-radius: 14px;
+            padding: 1.35rem 1.5rem;
             border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 1.25rem 1.5rem;
-            transition: border-color 0.2s ease;
+            transition: transform 0.15s ease;
         }}
 
         .stat-card:hover {{
-            border-color: var(--border-hover);
+            transform: translateY(-2px);
         }}
+
+        .stat-card.blue {{ background: #eff6ff; border-color: #dbeafe; }}
+        .stat-card.red {{ background: #fff1f2; border-color: #ffe4e6; }}
+        .stat-card.green {{ background: #f0fdf4; border-color: #dcfce7; }}
 
         .stat-label {{
-            font-size: 0.72rem;
+            font-size: 0.74rem;
             text-transform: uppercase;
-            letter-spacing: 0.06em;
-            color: var(--text-tertiary);
-            font-weight: 600;
-            margin-bottom: 0.35rem;
+            letter-spacing: 0.05em;
+            font-weight: 700;
+            margin-bottom: 0.4rem;
         }}
+
+        .stat-card.blue .stat-label {{ color: #1e40af; }}
+        .stat-card.red .stat-label {{ color: #991b1b; }}
+        .stat-card.green .stat-label {{ color: #166534; }}
 
         .stat-val {{
-            font-size: 1.9rem;
+            font-size: 2.1rem;
             font-weight: 700;
-            letter-spacing: -0.02em;
+            letter-spacing: -0.03em;
         }}
 
-        /* ---- Audit Form Section ---- */
+        .stat-card.blue .stat-val {{ color: #1e3a8a; }}
+        .stat-card.red .stat-val {{ color: #881337; }}
+        .stat-card.green .stat-val {{ color: #14532d; }}
+
+        /* ---- Main Audit Form Card ---- */
         .card-panel {{
-            background: var(--surface);
+            background: var(--card-bg);
             border: 1px solid var(--border);
             border-radius: 16px;
             padding: 1.75rem;
             margin-bottom: 2rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
         }}
 
         .section-title {{
-            font-size: 1.05rem;
-            font-weight: 600;
-            color: #ffffff;
-            margin-bottom: 1.25rem;
-            display: flex;
-            align-items: center;
-            gap: 8px;
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--text-heading);
+            margin-bottom: 1.35rem;
+            letter-spacing: -0.01em;
         }}
 
         .audit-grid {{
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 1.5rem;
+            gap: 1.75rem;
         }}
 
         .form-col {{
@@ -415,11 +432,11 @@ def serve_home():
         }}
 
         .field-group label {{
-            font-size: 0.75rem;
-            font-weight: 600;
+            font-size: 0.76rem;
+            font-weight: 700;
             text-transform: uppercase;
-            letter-spacing: 0.05em;
-            color: var(--text-secondary);
+            letter-spacing: 0.04em;
+            color: var(--text-heading);
         }}
 
         .field-group input[type="text"],
@@ -427,26 +444,26 @@ def serve_home():
         .field-group input[type="date"],
         .field-group textarea {{
             width: 100%;
-            background: #0d121f;
+            background: #ffffff;
             border: 1px solid var(--border);
-            border-radius: 8px;
-            color: #ffffff;
-            padding: 0.65rem 0.9rem;
+            border-radius: 9px;
+            color: var(--text-heading);
+            padding: 0.7rem 0.9rem;
             font-family: inherit;
             font-size: 0.88rem;
-            transition: all 0.2s ease;
+            transition: all 0.15s ease;
         }}
 
         .field-group input:focus,
         .field-group textarea:focus {{
             outline: none;
-            border-color: var(--accent);
-            box-shadow: 0 0 0 3px var(--accent-glow);
+            border-color: var(--accent-dark);
+            box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.08);
         }}
 
         .field-group textarea {{
             resize: vertical;
-            min-height: 65px;
+            min-height: 70px;
         }}
 
         .inline-row {{
@@ -456,8 +473,8 @@ def serve_home():
         }}
 
         .field-hint {{
-            font-size: 0.7rem;
-            color: var(--text-tertiary);
+            font-size: 0.72rem;
+            color: var(--text-muted);
             margin-top: 2px;
         }}
 
@@ -470,31 +487,30 @@ def serve_home():
 
         #auditMap {{
             flex: 1;
-            min-height: 340px;
-            border-radius: 10px;
+            min-height: 330px;
+            border-radius: 12px;
             border: 1px solid var(--border);
             z-index: 1;
         }}
 
         .map-caption {{
-            font-size: 0.72rem;
-            color: var(--text-tertiary);
+            font-size: 0.74rem;
+            color: var(--text-muted);
             margin-top: 0.5rem;
             text-align: center;
         }}
 
         /* Buttons */
-        .btn-primary {{
-            background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        .btn-dark {{
+            background: var(--accent-dark);
             color: #ffffff;
             border: none;
-            padding: 0.8rem 1.5rem;
-            border-radius: 9px;
+            padding: 0.85rem 1.5rem;
+            border-radius: 10px;
             font-size: 0.9rem;
             font-weight: 600;
             cursor: pointer;
-            box-shadow: 0 4px 14px var(--accent-glow);
-            transition: all 0.2s ease;
+            transition: all 0.15s ease;
             margin-top: 0.5rem;
             display: inline-flex;
             align-items: center;
@@ -502,33 +518,32 @@ def serve_home():
             gap: 8px;
         }}
 
-        .btn-primary:hover {{
+        .btn-dark:hover {{
+            background: var(--accent-dark-hover);
             transform: translateY(-1px);
-            box-shadow: 0 6px 20px var(--accent-glow);
         }}
 
-        .btn-primary:disabled {{
+        .btn-dark:disabled {{
             opacity: 0.5;
             cursor: not-allowed;
             transform: none;
         }}
 
-        /* ---- Folder Scan & File Upload Section ---- */
+        /* ---- Warm Cream Upload Banner ---- */
         .scan-bar {{
             display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 1.25rem 1.5rem;
-            background: var(--surface);
-            border: 1px dashed var(--border-hover);
+            flex-direction: column;
+            padding: 1.35rem 1.6rem;
+            background: #fefce8;
+            border: 1px dashed #fde047;
             border-radius: 14px;
-            margin-bottom: 2rem;
-            transition: all 0.2s ease;
+            margin-bottom: 1.5rem;
+            transition: all 0.15s ease;
         }}
 
         .scan-bar.drag-over {{
-            border-color: var(--accent);
-            background: rgba(99, 102, 241, 0.05);
+            border-color: #ca8a04;
+            background: #fef9c3;
         }}
 
         .scan-left {{
@@ -539,20 +554,20 @@ def serve_home():
 
         .scan-icon {{
             font-size: 1.5rem;
-            background: rgba(99, 102, 241, 0.1);
-            padding: 8px;
+            background: #fef08a;
+            padding: 8px 12px;
             border-radius: 10px;
         }}
 
         .scan-title {{
-            font-size: 0.92rem;
-            font-weight: 600;
-            color: #ffffff;
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: #713f12;
         }}
 
         .scan-sub {{
-            font-size: 0.75rem;
-            color: var(--text-tertiary);
+            font-size: 0.78rem;
+            color: #854d0e;
         }}
 
         .scan-actions {{
@@ -562,78 +577,82 @@ def serve_home():
         }}
 
         .badge-pending {{
-            background: rgba(99, 102, 241, 0.15);
-            color: var(--accent);
-            border: 1px solid rgba(99, 102, 241, 0.3);
-            padding: 4px 10px;
+            background: #fef08a;
+            color: #713f12;
+            border: 1px solid #fde047;
+            padding: 4px 12px;
             border-radius: 9999px;
-            font-size: 0.72rem;
-            font-weight: 600;
+            font-size: 0.75rem;
+            font-weight: 700;
         }}
 
         .btn-secondary {{
-            background: var(--surface-subtle);
+            background: #ffffff;
             border: 1px solid var(--border);
-            color: var(--text-primary);
+            color: var(--text-heading);
             padding: 8px 16px;
             border-radius: 8px;
             font-size: 0.82rem;
-            font-weight: 500;
+            font-weight: 600;
             cursor: pointer;
-            transition: all 0.2s ease;
+            transition: all 0.15s ease;
         }}
 
         .btn-secondary:hover {{
+            background: #f8fafc;
             border-color: var(--border-hover);
-            background: #2d3748;
         }}
 
         .btn-danger {{
             background: transparent;
-            border: 1px solid rgba(244, 63, 94, 0.3);
+            border: 1px solid #fecdd3;
             color: var(--accent-red);
             padding: 8px 14px;
             border-radius: 8px;
             font-size: 0.82rem;
-            font-weight: 500;
+            font-weight: 600;
             cursor: pointer;
-            transition: all 0.2s ease;
+            transition: all 0.15s ease;
         }}
 
         .btn-danger:hover {{
-            background: rgba(244, 63, 94, 0.1);
-            border-color: var(--accent-red);
+            background: #fff1f2;
         }}
 
         /* Status banner */
         .status-banner {{
             margin-top: 1rem;
-            padding: 0.75rem 1rem;
-            border-radius: 8px;
-            font-size: 0.82rem;
+            padding: 0.8rem 1rem;
+            border-radius: 9px;
+            font-size: 0.84rem;
             display: none;
+            font-weight: 500;
         }}
-        .status-banner.processing {{ display: block; background: rgba(99, 102, 241, 0.1); border: 1px solid var(--accent); color: #a5b4fc; }}
-        .status-banner.success {{ display: block; background: rgba(16, 185, 129, 0.1); border: 1px solid var(--accent-green); color: var(--accent-green); }}
-        .status-banner.error {{ display: block; background: rgba(244, 63, 94, 0.1); border: 1px solid var(--accent-red); color: var(--accent-red); }}
+        .status-banner.processing {{ display: block; background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }}
+        .status-banner.success {{ display: block; background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }}
+        .status-banner.error {{ display: block; background: #fff1f2; border: 1px solid #fecdd3; color: #991b1b; }}
 
         /* ---- Table ---- */
         .table-wrap {{
-            background: var(--surface);
+            background: var(--card-bg);
             border: 1px solid var(--border);
-            border-radius: 14px;
+            border-radius: 16px;
             overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
         }}
 
         .table-head-bar {{
-            padding: 1.25rem 1.5rem;
+            padding: 1.25rem 1.6rem;
             border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }}
 
         .table-head-bar h2 {{
-            font-size: 0.95rem;
-            font-weight: 600;
-            color: #ffffff;
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--text-heading);
         }}
 
         table {{
@@ -643,75 +662,80 @@ def serve_home():
         }}
 
         th {{
-            background: rgba(15, 23, 42, 0.6);
-            padding: 0.8rem 1.5rem;
-            font-size: 0.7rem;
-            color: var(--text-tertiary);
+            background: #f8fafc;
+            padding: 0.85rem 1.6rem;
+            font-size: 0.72rem;
+            color: var(--text-muted);
             text-transform: uppercase;
-            letter-spacing: 0.06em;
-            font-weight: 600;
+            letter-spacing: 0.05em;
+            font-weight: 700;
             border-bottom: 1px solid var(--border);
         }}
 
         td {{
-            padding: 1rem 1.5rem;
+            padding: 1.1rem 1.6rem;
             border-bottom: 1px solid var(--border);
-            font-size: 0.86rem;
+            font-size: 0.88rem;
+            color: var(--text-body);
         }}
 
-        tr:hover {{ background: rgba(255, 255, 255, 0.02); }}
+        tr:hover {{ background: #f8fafc; }}
         tr:last-child td {{ border-bottom: none; }}
 
         .project-name {{
-            font-weight: 600;
-            color: #ffffff;
+            font-weight: 700;
+            color: var(--text-heading);
             margin-bottom: 2px;
         }}
 
         .project-meta {{
-            font-size: 0.72rem;
-            color: var(--text-tertiary);
+            font-size: 0.75rem;
+            color: var(--text-muted);
         }}
 
         .project-meta code {{
             font-family: monospace;
-            color: var(--text-secondary);
+            background: #f1f5f9;
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: var(--text-body);
         }}
 
         .location-cell {{
-            color: var(--text-secondary);
-            font-size: 0.82rem;
+            color: var(--text-muted);
+            font-size: 0.84rem;
         }}
 
         .badge {{
-            padding: 3px 10px;
+            padding: 4px 12px;
             border-radius: 9999px;
-            font-weight: 600;
-            font-size: 0.72rem;
+            font-weight: 700;
+            font-size: 0.74rem;
             display: inline-block;
         }}
 
-        .badge-PRIORITY_FIELD_VERIFICATION_RECOMMENDED {{ background: rgba(244, 63, 94, 0.15); color: var(--accent-red); border: 1px solid rgba(244, 63, 94, 0.3); }}
-        .badge-PARTIAL_CHANGE_DETECTED {{ background: rgba(245, 158, 11, 0.15); color: var(--accent-amber); border: 1px solid rgba(245, 158, 11, 0.3); }}
-        .badge-HIGH_PHYSICAL_CHANGE_VERIFIED {{ background: rgba(16, 185, 129, 0.15); color: var(--accent-green); border: 1px solid rgba(16, 185, 129, 0.3); }}
+        .badge-PRIORITY_FIELD_VERIFICATION_RECOMMENDED {{ background: #ffe4e6; color: #9f1239; border: 1px solid #fecdd3; }}
+        .badge-PARTIAL_CHANGE_DETECTED {{ background: #fef3c7; color: #92400e; border: 1px solid #fde047; }}
+        .badge-HIGH_PHYSICAL_CHANGE_VERIFIED {{ background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }}
 
         .btn-card {{
-            color: var(--accent-cyan);
+            color: var(--text-heading);
             text-decoration: none;
-            font-size: 0.82rem;
-            font-weight: 600;
-            transition: opacity 0.2s;
+            font-size: 0.84rem;
+            font-weight: 700;
+            transition: opacity 0.15s;
         }}
-        .btn-card:hover {{ opacity: 0.8; text-decoration: underline; }}
+        .btn-card:hover {{ opacity: 0.7; }}
 
         .empty-box {{
             text-align: center;
-            padding: 3rem 2rem;
-            color: var(--text-tertiary);
+            padding: 3.5rem 2rem;
+            color: var(--text-muted);
         }}
 
-        @media (max-width: 768px) {{
-            body {{ padding: 1.5rem 1rem; }}
+        @media (max-width: 900px) {{
+            .sidebar {{ display: none; }}
+            .main-wrapper {{ margin-left: 0; width: 100%; padding: 1.5rem 1rem; }}
             .stats-grid {{ grid-template-columns: 1fr; }}
             .audit-grid {{ grid-template-columns: 1fr; }}
             .scan-bar {{ flex-direction: column; gap: 1rem; text-align: center; }}
@@ -720,40 +744,43 @@ def serve_home():
 </head>
 <body>
     <div class="container">
-        <!-- Navbar -->
-        <div class="navbar">
+        <!-- Top Navigation Bar -->
+        <header class="topbar">
             <div class="brand-group">
                 {logo_html}
                 <div>
-                    <div class="brand-title">SENTRA</div>
+                    <div class="brand-title">Sentra</div>
                     <div class="brand-sub">AI Satellite Audit Platform for Public Infrastructure</div>
                 </div>
             </div>
-            <div class="status-badge">
-                <div class="status-dot"></div>
-                Esri Wayback API Active
-            </div>
-        </div>
 
-        <!-- Metrics Overview -->
-        <div class="stats-grid">
-            <div class="stat-card">
+            <div class="topbar-actions">
+                <div class="status-badge">
+                    <div class="status-dot"></div>
+                    Esri Wayback Feed Active
+                </div>
+            </div>
+        </header>
+
+        <!-- Metrics Overview Grid -->
+        <section class="stats-grid">
+            <div class="stat-card blue">
                 <div class="stat-label">Audited Projects</div>
-                <div class="stat-val" style="color: var(--accent-cyan);">{total_audited}</div>
+                <div class="stat-val">{total_audited}</div>
             </div>
-            <div class="stat-card">
+            <div class="stat-card red">
                 <div class="stat-label">Flagged for Verification</div>
-                <div class="stat-val" style="color: var(--accent-red);">{flagged_count}</div>
+                <div class="stat-val">{flagged_count}</div>
             </div>
-            <div class="stat-card">
+            <div class="stat-card green">
                 <div class="stat-label">Verified Physical Work</div>
-                <div class="stat-val" style="color: var(--accent-green);">{verified_count}</div>
+                <div class="stat-val">{verified_count}</div>
             </div>
-        </div>
+        </section>
 
-        <!-- Main Audit Form -->
-        <div class="card-panel">
-            <div class="section-title">📍 Report Infrastructure Site for Satellite Audit</div>
+        <!-- Infrastructure Audit Form & Map -->
+        <section class="card-panel" id="audit-form">
+            <h2 class="section-title">📍 Report Infrastructure Site for Satellite Audit</h2>
 
             <div class="audit-grid">
                 <!-- Form Inputs -->
@@ -793,7 +820,7 @@ def serve_home():
                         </div>
                     </div>
 
-                    <button class="btn-primary" id="submitBtn" onclick="submitReport()">Run Space-Borne Satellite Audit</button>
+                    <button class="btn-dark" id="submitBtn" onclick="submitReport()">Run Space-Borne Satellite Audit</button>
                     <div id="reportStatus" class="status-banner"></div>
                 </div>
 
@@ -803,30 +830,32 @@ def serve_home():
                     <div class="map-caption">💡 Drag pin or click map to pick coordinates · Or type Lat/Lon manually</div>
                 </div>
             </div>
-        </div>
+        </section>
 
-        <!-- Interactive File Upload & Tender Scan Zone -->
-        <div class="scan-bar" id="dropZone" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
-            <div class="scan-left">
-                <span class="scan-icon">📄</span>
-                <div>
-                    <div class="scan-title">Upload Tender Documents (PDF, Image, Text)</div>
-                    <div class="scan-sub">Upload tender files directly from your browser to run automated satellite audits</div>
+        <!-- Warm Cream Upload Tender Dropzone -->
+        <section class="scan-bar" id="upload-zone" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
+            <div style="display:flex; align-items:center; justify-content:space-between; width:100%;">
+                <div class="scan-left">
+                    <span class="scan-icon">📄</span>
+                    <div>
+                        <div class="scan-title">Upload Tender Documents (PDF, Image, Text)</div>
+                        <div class="scan-sub">Upload tender files directly from your browser to run automated satellite audits</div>
+                    </div>
+                </div>
+                <div class="scan-actions">
+                    <input type="file" id="tenderFileInput" multiple accept=".pdf,.png,.jpg,.jpeg,.txt,.doc,.docx" onchange="uploadTenders(this.files)" style="display:none;" />
+                    <label for="tenderFileInput" class="btn-dark" style="margin:0; font-size:0.84rem; padding: 8px 18px; cursor:pointer;">📁 Choose Tender Files</label>
+                    <button class="btn-secondary" id="scanBtn" onclick="scanFolder()">Scan Server ({pending_count})</button>
                 </div>
             </div>
-            <div class="scan-actions">
-                <input type="file" id="tenderFileInput" multiple accept=".pdf,.png,.jpg,.jpeg,.txt,.doc,.docx" onchange="uploadTenders(this.files)" style="display:none;" />
-                <label for="tenderFileInput" class="btn-primary" style="margin:0; font-size:0.82rem; padding: 8px 16px; cursor:pointer;">📁 Upload Files</label>
-                <button class="btn-secondary" id="scanBtn" onclick="scanFolder()">Scan Server ({pending_count})</button>
-                <button class="btn-danger" onclick="clearHistory()">Clear History</button>
-            </div>
-        </div>
-        <div id="scanStatus" class="status-banner"></div>
+            <div id="scanStatus" class="status-banner" style="margin-top:0.85rem; width:100%;"></div>
+        </section>
 
         <!-- Audit Results Table -->
-        <div class="table-wrap">
+        <section class="table-wrap" id="audit-log">
             <div class="table-head-bar">
                 <h2>Audit Results Log</h2>
+                <button class="btn-danger" onclick="clearHistory()">Clear History</button>
             </div>
             <table>
                 <thead>
@@ -841,7 +870,7 @@ def serve_home():
                     {rows_html if rows_html else '<tr><td colspan="4"><div class="empty-box">No satellite audits in database yet. Submit a work site above or upload tender documents.</div></td></tr>'}
                 </tbody>
             </table>
-        </div>
+        </section>
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -1008,15 +1037,15 @@ def serve_home():
         // Drag & Drop event handlers
         function handleDragOver(e) {{
             e.preventDefault();
-            document.getElementById('dropZone').classList.add('drag-over');
+            document.getElementById('upload-zone').classList.add('drag-over');
         }}
         function handleDragLeave(e) {{
             e.preventDefault();
-            document.getElementById('dropZone').classList.remove('drag-over');
+            document.getElementById('upload-zone').classList.remove('drag-over');
         }}
         function handleDrop(e) {{
             e.preventDefault();
-            document.getElementById('dropZone').classList.remove('drag-over');
+            document.getElementById('upload-zone').classList.remove('drag-over');
             if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {{
                 uploadTenders(e.dataTransfer.files);
             }}
@@ -1076,7 +1105,7 @@ def serve_home():
         return HTMLResponse(content=html)
     except Exception as e:
         print(f"[App] Error in serve_home: {e}")
-        return HTMLResponse(content=f"<html><body style='background:#090d16;color:#ffffff;font-family:sans-serif;padding:2rem;'><h2>Sentra AI Audit Platform</h2><p>Server initialized cleanly. Reload to refresh dashboard.</p><script>setTimeout(() => window.location.reload(), 1500);</script></body></html>")
+        return HTMLResponse(content=f"<html><body style='background:#f8fafc;color:#0f172a;font-family:sans-serif;padding:2rem;'><h2>Sentra AI Audit Platform</h2><p>Server initialized cleanly. Reload to refresh dashboard.</p><script>setTimeout(() => window.location.reload(), 1500);</script></body></html>")
 
 
 @app.post("/api/community/report")
