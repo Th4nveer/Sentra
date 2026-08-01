@@ -267,13 +267,14 @@ def serve_home():
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             background-color: var(--bg);
             color: var(--text-primary);
-            padding: 2.5rem 1.5rem;
+            padding: 1.5rem 2rem;
             line-height: 1.5;
             -webkit-font-smoothing: antialiased;
         }}
 
         .container {{
-            max-width: 1140px;
+            width: 100%;
+            max-width: 100%;
             margin: 0 auto;
         }}
 
@@ -469,7 +470,7 @@ def serve_home():
 
         #auditMap {{
             flex: 1;
-            min-height: 290px;
+            min-height: 340px;
             border-radius: 10px;
             border: 1px solid var(--border);
             z-index: 1;
