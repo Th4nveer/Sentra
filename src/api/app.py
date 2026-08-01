@@ -28,7 +28,9 @@ app = FastAPI(
 os.makedirs("./data/reports", exist_ok=True)
 os.makedirs("./data/raw_tenders", exist_ok=True)
 os.makedirs("./data/processed", exist_ok=True)
+os.makedirs("./static", exist_ok=True)
 app.mount("/reports", StaticFiles(directory="./data/reports", html=True), name="reports")
+app.mount("/static", StaticFiles(directory="./static"), name="static")
 
 # Initialize audit services
 parser_service = TenderParser()
@@ -191,6 +193,14 @@ def serve_home():
         verified_count = sum(1 for r in audited_records if r["audit"].classification == "HIGH_PHYSICAL_CHANGE_VERIFIED")
 
         pending_count = folder_scanner.get_pending_count() if folder_scanner else 0
+
+        # Check for custom logo file in ./static/
+        logo_html = '<div class="brand-icon">S</div>'
+        for ext in ["png", "svg", "jpg", "jpeg", "webp"]:
+            logo_path = f"./static/logo.{ext}"
+            if os.path.exists(logo_path):
+                logo_html = f'<img src="/static/logo.{ext}" alt="Logo" class="brand-logo-img" style="height: 38px; width: auto; max-width: 180px; object-fit: contain; border-radius: 8px;" />'
+                break
 
         rows_html = ""
         for r in sorted(audited_records, key=lambda x: x["audit"].fraud_risk_score, reverse=True):
@@ -711,7 +721,7 @@ def serve_home():
         <!-- Navbar -->
         <div class="navbar">
             <div class="brand-group">
-                <div class="brand-icon">S</div>
+                {logo_html}
                 <div>
                     <div class="brand-title">SENTRA</div>
                     <div class="brand-sub">AI Satellite Audit Platform for Public Infrastructure</div>

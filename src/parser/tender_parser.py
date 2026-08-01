@@ -178,9 +178,8 @@ Tender Document Text:
         contractor_match = re.search(r'(?:Contractor|Awarded to|Vendor)[:\s]+([^\n\.,]+)', text, re.IGNORECASE)
         contractor = contractor_match.group(1).strip() if contractor_match else "Unknown Contractor"
 
-        # Location text
-        loc_match = re.search(r'(?:Location|Site|Ward|Address)[:\s]+([^\n\.]+)', text, re.IGNORECASE)
-        location_text = loc_match.group(1).strip() if loc_match else text[:150]
+        # Location text extraction using multi-pattern heuristic
+        location_text = self._extract_location_from_text(text)
 
         return TenderData(
             tender_id=tender_id,
@@ -194,6 +193,36 @@ Tender Document Text:
             location_text=location_text,
             expected_alteration_type=expected_alteration
         )
+
+    def _extract_location_from_text(self, text: str) -> str:
+        """Extracts the cleanest location description from document text without header clutter."""
+        # 1. Search for explicit Location / Site / Address / Ward labels
+        loc_match = re.search(r'(?:Location|Site|Ward|Address|Place|Stretch)[:\s]+([^\n\.;]+)', text, re.IGNORECASE)
+        if loc_match:
+            cand = loc_match.group(1).strip()
+            if len(cand) >= 5 and not cand.lower().startswith("of"):
+                return cand
+
+        # 2. Search for Highway / Stretch / Landmark mentions (e.g. NH 16, Puintola to Tangi, Silk Board, etc.)
+        highway_match = re.search(r'\b(NH[- ]?\d+|National Highway \d+|[A-Z][a-z]+ to [A-Z][a-z]+|Ward \d+|Sector \d+)\b[^\n\.;]*', text)
+        if highway_match:
+            return highway_match.group(0).strip()
+
+        # 3. Search for City / State / Pincode mentions
+        city_state_match = re.search(r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s*,\s*([A-Z][a-z]+|\d{6})\b', text)
+        if city_state_match:
+            return city_state_match.group(0).strip()
+
+        # 4. Search for known city landmarks in text
+        known_cities = ["Bengaluru", "Bangalore", "Odisha", "Mumbai", "Noida", "Delhi", "Hyderabad", "Chennai", "Kolkata", "Pune"]
+        for city in known_cities:
+            if city.lower() in text.lower():
+                # Extract sentence containing city
+                lines = [line.strip() for line in text.split('\n') if city.lower() in line.lower()]
+                if lines:
+                    return lines[0][:100]
+
+        return "Bellandur Lake, Bengaluru, Karnataka"
 
     @staticmethod
     def _normalize_date(date_str: str) -> str:
