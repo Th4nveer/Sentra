@@ -21,7 +21,7 @@ from src.report.triage_dashboard import TriageDashboardGenerator
 app = FastAPI(
     title="Sentra AI Satellite Audit API & Dashboard",
     description="Automated space-borne AI satellite audit platform for public infrastructure",
-    version="2.1.0"
+    version="2.2.0"
 )
 
 # Ensure directories exist and mount static files
@@ -179,8 +179,8 @@ def startup_event():
 def serve_home():
     """
     Renders the interactive Sentra AI Web Dashboard.
-    Clean, sleek, non-AI-slop design with bidirectional coordinate input, start/end dates,
-    interactive map, and streamlined satellite audit table.
+    Supports community reporting, interactive map, direct tender document file uploads (PDF, images, TXT),
+    and satellite audit evidence cards.
     """
     try:
         audited_records = load_all_records() or []
@@ -190,7 +190,6 @@ def serve_home():
         ])
         verified_count = sum(1 for r in audited_records if r["audit"].classification == "HIGH_PHYSICAL_CHANGE_VERIFIED")
 
-        # Get pending tender count
         pending_count = folder_scanner.get_pending_count() if folder_scanner else 0
 
         rows_html = ""
@@ -485,6 +484,10 @@ def serve_home():
             box-shadow: 0 4px 14px var(--accent-glow);
             transition: all 0.2s ease;
             margin-top: 0.5rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
         }}
 
         .btn-primary:hover {{
@@ -498,30 +501,39 @@ def serve_home():
             transform: none;
         }}
 
-        /* ---- Folder Scan Section ---- */
+        /* ---- Folder Scan & File Upload Section ---- */
         .scan-bar {{
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 1rem 1.25rem;
+            padding: 1.25rem 1.5rem;
             background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 12px;
+            border: 1px dashed var(--border-hover);
+            border-radius: 14px;
             margin-bottom: 2rem;
+            transition: all 0.2s ease;
+        }}
+
+        .scan-bar.drag-over {{
+            border-color: var(--accent);
+            background: rgba(99, 102, 241, 0.05);
         }}
 
         .scan-left {{
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 14px;
         }}
 
         .scan-icon {{
-            font-size: 1.2rem;
+            font-size: 1.5rem;
+            background: rgba(99, 102, 241, 0.1);
+            padding: 8px;
+            border-radius: 10px;
         }}
 
         .scan-title {{
-            font-size: 0.88rem;
+            font-size: 0.92rem;
             font-weight: 600;
             color: #ffffff;
         }}
@@ -541,7 +553,7 @@ def serve_home():
             background: rgba(99, 102, 241, 0.15);
             color: var(--accent);
             border: 1px solid rgba(99, 102, 241, 0.3);
-            padding: 3px 10px;
+            padding: 4px 10px;
             border-radius: 9999px;
             font-size: 0.72rem;
             font-weight: 600;
@@ -781,18 +793,19 @@ def serve_home():
             </div>
         </div>
 
-        <!-- Tender Folder Scan Bar -->
-        <div class="scan-bar">
+        <!-- Interactive File Upload & Tender Scan Zone -->
+        <div class="scan-bar" id="dropZone" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
             <div class="scan-left">
-                <span class="scan-icon">📂</span>
+                <span class="scan-icon">📄</span>
                 <div>
-                    <div class="scan-title">Scan Tender Documents Folder</div>
-                    <div class="scan-sub">Drop PDF, image, or text files into <code>data/raw_tenders/</code></div>
+                    <div class="scan-title">Upload Tender Documents (PDF, Image, Text)</div>
+                    <div class="scan-sub">Upload tender files directly from your browser to run automated satellite audits</div>
                 </div>
             </div>
             <div class="scan-actions">
-                <span class="badge-pending">{pending_count} pending</span>
-                <button class="btn-secondary" id="scanBtn" onclick="scanFolder()">Scan & Audit</button>
+                <input type="file" id="tenderFileInput" multiple accept=".pdf,.png,.jpg,.jpeg,.txt,.doc,.docx" onchange="uploadTenders(this.files)" style="display:none;" />
+                <label for="tenderFileInput" class="btn-primary" style="margin:0; font-size:0.82rem; padding: 8px 16px; cursor:pointer;">📁 Upload Files</label>
+                <button class="btn-secondary" id="scanBtn" onclick="scanFolder()">Scan Server ({pending_count})</button>
                 <button class="btn-danger" onclick="clearHistory()">Clear History</button>
             </div>
         </div>
@@ -813,7 +826,7 @@ def serve_home():
                     </tr>
                 </thead>
                 <tbody>
-                    {rows_html if rows_html else '<tr><td colspan="4"><div class="empty-box">No satellite audits in database yet. Submit a work site above or scan tender documents.</div></td></tr>'}
+                    {rows_html if rows_html else '<tr><td colspan="4"><div class="empty-box">No satellite audits in database yet. Submit a work site above or upload tender documents.</div></td></tr>'}
                 </tbody>
             </table>
         </div>
@@ -833,7 +846,6 @@ def serve_home():
 
         const marker = L.marker([defaultLat, defaultLon], {{ draggable: true }}).addTo(map);
 
-        // Update inputs when marker moves
         function syncInputsFromMarker(lat, lon) {{
             document.getElementById('reportLat').value = parseFloat(lat).toFixed(6);
             document.getElementById('reportLon').value = parseFloat(lon).toFixed(6);
@@ -849,7 +861,6 @@ def serve_home():
             syncInputsFromMarker(e.latlng.lat, e.latlng.lng);
         }});
 
-        // Update marker when user edits Lat/Lon input fields manually
         function onCoordInputChanged() {{
             const latVal = parseFloat(document.getElementById('reportLat').value);
             const lonVal = parseFloat(document.getElementById('reportLon').value);
@@ -885,7 +896,7 @@ def serve_home():
 
         setTimeout(() => map.invalidateSize(), 250);
 
-        // ---- Submit Report ----
+        // ---- Submit Citizen Report ----
         async function submitReport() {{
             const title = document.getElementById('reportTitle').value.trim();
             const desc = document.getElementById('reportDesc').value.trim();
@@ -945,6 +956,60 @@ def serve_home():
             }}
         }}
 
+        // ---- Upload Tender Files Directly ----
+        async function uploadTenders(fileList) {{
+            if (!fileList || fileList.length === 0) return;
+
+            const statusEl = document.getElementById('scanStatus');
+            statusEl.className = 'status-banner processing';
+            statusEl.textContent = `⏳ Uploading and auditing ${{fileList.length}} tender file(s)...`;
+
+            const formData = new FormData();
+            for (let i = 0; i < fileList.length; i++) {{
+                formData.append('files', fileList[i]);
+            }}
+
+            try {{
+                const resp = await fetch('/api/audit/upload-tender', {{
+                    method: 'POST',
+                    body: formData
+                }});
+                const data = await resp.json();
+
+                if (data.status === 'success') {{
+                    statusEl.className = 'status-banner success';
+                    statusEl.textContent = '✅ ' + data.message;
+                    if (data.results && data.results.length > 0) {{
+                        window.open(data.results[0].evidence_card_url, '_blank');
+                    }}
+                    setTimeout(() => window.location.reload(), 2000);
+                }} else {{
+                    statusEl.className = 'status-banner error';
+                    statusEl.textContent = '❌ ' + (data.detail || data.message || 'Upload failed');
+                }}
+            }} catch (err) {{
+                statusEl.className = 'status-banner error';
+                statusEl.textContent = '❌ Upload failed: ' + err.message;
+            }}
+        }}
+
+        // Drag & Drop event handlers
+        function handleDragOver(e) {{
+            e.preventDefault();
+            document.getElementById('dropZone').classList.add('drag-over');
+        }}
+        function handleDragLeave(e) {{
+            e.preventDefault();
+            document.getElementById('dropZone').classList.remove('drag-over');
+        }}
+        function handleDrop(e) {{
+            e.preventDefault();
+            document.getElementById('dropZone').classList.remove('drag-over');
+            if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {{
+                uploadTenders(e.dataTransfer.files);
+            }}
+        }}
+
         // ---- Scan Folder ----
         async function scanFolder() {{
             const btn = document.getElementById('scanBtn');
@@ -953,7 +1018,7 @@ def serve_home():
             btn.disabled = true;
             btn.textContent = 'Scanning...';
             statusEl.className = 'status-banner processing';
-            statusEl.textContent = '⏳ Scanning raw tenders folder...';
+            statusEl.textContent = '⏳ Scanning tender folder...';
 
             try {{
                 const resp = await fetch('/api/audit/scan-folder', {{
@@ -975,7 +1040,7 @@ def serve_home():
                 statusEl.textContent = '❌ Scan failed: ' + err.message;
             }} finally {{
                 btn.disabled = false;
-                btn.textContent = 'Scan & Audit';
+                btn.textContent = 'Scan Server ({pending_count})';
             }}
         }}
 
@@ -1044,6 +1109,57 @@ def community_report_endpoint(request: CommunityReportRequest):
     except Exception as e:
         print(f"[COMMUNITY REPORT ERROR] {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/audit/upload-tender")
+async def upload_tender_endpoint(files: List[UploadFile] = File(...)):
+    """
+    Accepts uploaded tender documents (PDF, images, text), saves them to data/raw_tenders/,
+    runs the full satellite audit pipeline on each file, and returns results.
+    """
+    if not files:
+        raise HTTPException(status_code=400, detail="No files uploaded.")
+    
+    saved_paths = []
+    for file in files:
+        if not file.filename:
+            continue
+        safe_filename = os.path.basename(file.filename)
+        target_path = os.path.join("./data/raw_tenders", safe_filename)
+        contents = await file.read()
+        with open(target_path, "wb") as f:
+            f.write(contents)
+        saved_paths.append(target_path)
+    
+    processed = 0
+    results_list = []
+    errors = []
+    
+    scan_results = folder_scanner.scan()
+    for filepath, text, tender_data in scan_results:
+        try:
+            record, card_res = run_full_audit(text)
+            processed += 1
+            results_list.append({
+                "tender_id": record["tender"].tender_id,
+                "project_name": record["tender"].project_name,
+                "verdict": record["audit"].classification,
+                "evidence_card_url": f"/reports/{record['tender'].tender_id}/evidence_card.html"
+            })
+        except Exception as e:
+            errors.append(f"{os.path.basename(filepath)}: {str(e)}")
+
+    message = f"Uploaded and audited {processed} document(s) successfully."
+    if errors:
+        message += f" {len(errors)} error(s): {'; '.join(errors)}"
+
+    return {
+        "status": "success",
+        "message": message,
+        "processed": processed,
+        "results": results_list,
+        "errors": errors
+    }
 
 
 @app.post("/api/audit/parse")
