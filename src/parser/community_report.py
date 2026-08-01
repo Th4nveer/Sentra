@@ -20,6 +20,10 @@ class CommunityReport(BaseModel):
         default=None,
         description="User-provided estimated start date (YYYY-MM-DD). Falls back to submission_date if not provided."
     )
+    estimated_end_date: Optional[str] = Field(
+        default=None,
+        description="User-provided estimated end/completion date (YYYY-MM-DD). Defaults to today's date if not provided."
+    )
     submission_date: str = Field(
         default_factory=lambda: date.today().isoformat(),
         description="Date the report was submitted (auto-filled)"
@@ -34,7 +38,6 @@ class CommunityReport(BaseModel):
     def get_start_date(self) -> str:
         """Returns the effective start date: estimated_start_date if provided, else submission_date."""
         if self.estimated_start_date:
-            # Validate the date format
             try:
                 datetime.strptime(self.estimated_start_date, "%Y-%m-%d")
                 return self.estimated_start_date
@@ -43,7 +46,13 @@ class CommunityReport(BaseModel):
         return self.submission_date
 
     def get_completion_date(self) -> str:
-        """Returns today's date as the completion date (check progress up to now)."""
+        """Returns estimated_end_date if provided, else today's date."""
+        if self.estimated_end_date:
+            try:
+                datetime.strptime(self.estimated_end_date, "%Y-%m-%d")
+                return self.estimated_end_date
+            except ValueError:
+                pass
         return date.today().isoformat()
 
     def to_tender_data(self) -> TenderData:

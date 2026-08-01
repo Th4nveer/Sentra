@@ -2,7 +2,7 @@
 FastAPI Web API Server & Interactive Web Application for Sentra AI Satellite Audit Platform.
 """
 import os
-from datetime import date
+from datetime import date, datetime, timedelta
 from typing import Optional, List
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
@@ -21,7 +21,7 @@ from src.report.triage_dashboard import TriageDashboardGenerator
 app = FastAPI(
     title="Sentra AI Satellite Audit API & Dashboard",
     description="Automated space-borne AI satellite audit platform for public infrastructure",
-    version="2.0.0"
+    version="2.1.0"
 )
 
 # Ensure directories exist and mount static files
@@ -54,6 +54,7 @@ class CommunityReportRequest(BaseModel):
     latitude: float
     longitude: float
     estimated_start_date: Optional[str] = None
+    estimated_end_date: Optional[str] = None
 
 
 from src.report.record_store import save_record, load_all_records, clear_all_records
@@ -63,9 +64,7 @@ def run_full_audit(
     scenario_override: Optional[str] = None
 ):
     tender = parser_service.parse_text(tender_text)
-    
     scenario = scenario_override
-
     geocoding = geocoder_service.geocode(tender.location_text)
 
     sat_data = satellite_service.fetch_dual_temporal_imagery(
@@ -179,8 +178,9 @@ def startup_event():
 @app.get("/", response_class=HTMLResponse)
 def serve_home():
     """
-    Renders the full interactive Sentra AI Web Application at the root URL.
-    Includes community report submission with interactive map and simplified audit results table.
+    Renders the interactive Sentra AI Web Dashboard.
+    Clean, sleek, non-AI-slop design with bidirectional coordinate input, start/end dates,
+    interactive map, and streamlined satellite audit table.
     """
     try:
         audited_records = load_all_records() or []
@@ -200,31 +200,28 @@ def serve_home():
             g = r["geocoding"]
             badge_cls = f"badge-{a.classification}"
             
-            # Human-readable verdict labels
             verdict_map = {
                 "PRIORITY_FIELD_VERIFICATION_RECOMMENDED": "Flagged",
-                "PARTIAL_CHANGE_DETECTED": "Partial",
+                "PARTIAL_CHANGE_DETECTED": "Partial Work",
                 "HIGH_PHYSICAL_CHANGE_VERIFIED": "Verified"
             }
             badge_label = verdict_map.get(a.classification, a.classification.replace("_", " "))
             
-            # Truncate location for table display
             location_display = g.formatted_address
-            if len(location_display) > 50:
-                location_display = location_display[:47] + "..."
+            if len(location_display) > 55:
+                location_display = location_display[:52] + "..."
             
-            # Source tag for community vs tender
-            source_tag = "👥 Community" if t.tender_id.startswith("CR-") else "📄 Tender"
+            source_tag = "👥 Citizen Report" if t.tender_id.startswith("CR-") else "📄 Tender Doc"
 
             rows_html += f"""
             <tr>
                 <td>
                     <div class="project-name">{t.project_name}</div>
-                    <div class="project-meta">{source_tag} · {t.tender_id}</div>
+                    <div class="project-meta"><span>{source_tag}</span> · <code>{t.tender_id}</code></div>
                 </td>
                 <td class="location-cell">{location_display}</td>
                 <td><span class="badge {badge_cls}">{badge_label}</span></td>
-                <td><a class="btn-card" href="/reports/{t.tender_id}/evidence_card.html" target="_blank">View</a></td>
+                <td style="text-align: right;"><a class="btn-card" href="/reports/{t.tender_id}/evidence_card.html" target="_blank">View Card →</a></td>
             </tr>
             """
 
@@ -234,396 +231,385 @@ def serve_home():
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SENTRA - AI Satellite Audit for Public Infrastructure</title>
+    <title>SENTRA · Space-Borne Satellite Audit</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         :root {{
             --bg: #090d16;
-            --card-bg: #131b2e;
-            --card-border: #1e293b;
-            --accent-red: #ef4444;
-            --accent-yellow: #f59e0b;
+            --surface: #111827;
+            --surface-subtle: #1f2937;
+            --border: rgba(255, 255, 255, 0.08);
+            --border-hover: rgba(255, 255, 255, 0.16);
+            --accent: #6366f1;
+            --accent-glow: rgba(99, 102, 241, 0.25);
+            --accent-cyan: #06b6d4;
             --accent-green: #10b981;
-            --accent-blue: #3b82f6;
-            --accent-purple: #8b5cf6;
-            --text-main: #f8fafc;
-            --text-muted: #94a3b8;
+            --accent-red: #f43f5e;
+            --accent-amber: #f59e0b;
+            --text-primary: #f9fafb;
+            --text-secondary: #9ca3af;
+            --text-tertiary: #6b7280;
         }}
 
         * {{ box-sizing: border-box; margin: 0; padding: 0; }}
         body {{
-            font-family: 'Inter', sans-serif;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             background-color: var(--bg);
-            color: var(--text-main);
-            padding: 2rem;
+            color: var(--text-primary);
+            padding: 2.5rem 1.5rem;
             line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
         }}
 
+        .container {{
+            max-width: 1140px;
+            margin: 0 auto;
+        }}
+
+        /* ---- Header Bar ---- */
         .navbar {{
-            max-width: 1200px;
-            margin: 0 auto 2rem auto;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 1rem 1.5rem;
-            background: rgba(19, 27, 46, 0.7);
-            border: 1px solid var(--card-border);
-            border-radius: 14px;
-            backdrop-filter: blur(10px);
+            margin-bottom: 2rem;
+            padding-bottom: 1.25rem;
+            border-bottom: 1px solid var(--border);
         }}
 
-        .brand-logo {{
+        .brand-group {{
             display: flex;
             align-items: center;
             gap: 12px;
         }}
 
-        .logo-icon {{
-            width: 40px;
-            height: 40px;
-            background: linear-gradient(135deg, #ef4444, #3b82f6);
-            border-radius: 10px;
+        .brand-icon {{
+            width: 38px;
+            height: 38px;
+            background: linear-gradient(135deg, #6366f1 0%, #06b6d4 100%);
+            border-radius: 9px;
             display: flex;
             align-items: center;
             justify-content: center;
             font-weight: 700;
-            font-size: 1.2rem;
-            color: #fff;
-            box-shadow: 0 4px 14px rgba(239, 68, 68, 0.3);
+            font-size: 1.1rem;
+            color: #ffffff;
+            box-shadow: 0 0 20px var(--accent-glow);
         }}
 
-        .brand-name {{
-            font-size: 1.5rem;
+        .brand-title {{
+            font-size: 1.35rem;
             font-weight: 700;
             letter-spacing: -0.02em;
-            background: linear-gradient(135deg, #ffffff 0%, #94a3b8 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            color: #ffffff;
         }}
 
-        .status-pill {{
-            background: rgba(16, 185, 129, 0.15);
-            border: 1px solid var(--accent-green);
-            color: var(--accent-green);
-            padding: 6px 14px;
-            border-radius: 9999px;
-            font-size: 0.8rem;
-            font-weight: 600;
+        .brand-sub {{
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            font-weight: 400;
+        }}
+
+        .status-badge {{
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 8px;
+            padding: 6px 14px;
+            background: rgba(16, 185, 129, 0.08);
+            border: 1px solid rgba(16, 185, 129, 0.25);
+            border-radius: 9999px;
+            font-size: 0.78rem;
+            font-weight: 500;
+            color: var(--accent-green);
         }}
 
-        .pulse-dot {{
-            width: 8px;
-            height: 8px;
+        .status-dot {{
+            width: 6px;
+            height: 6px;
             background: var(--accent-green);
             border-radius: 50%;
-            animation: pulse 2s infinite;
+            box-shadow: 0 0 8px var(--accent-green);
         }}
 
-        @keyframes pulse {{
-            0% {{ transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }}
-            70% {{ transform: scale(1); box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }}
-            100% {{ transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }}
-        }}
-
-        .container {{
-            max-width: 1200px;
-            margin: 0 auto;
-        }}
-
+        /* ---- Metrics Overview ---- */
         .stats-grid {{
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: 1.25rem;
+            gap: 1rem;
             margin-bottom: 2rem;
         }}
 
         .stat-card {{
-            background: var(--card-bg);
-            border: 1px solid var(--card-border);
-            border-radius: 14px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
             padding: 1.25rem 1.5rem;
+            transition: border-color 0.2s ease;
         }}
 
-        .stat-title {{
-            font-size: 0.75rem;
-            color: var(--text-muted);
+        .stat-card:hover {{
+            border-color: var(--border-hover);
+        }}
+
+        .stat-label {{
+            font-size: 0.72rem;
             text-transform: uppercase;
-            letter-spacing: 0.05em;
-            margin-bottom: 0.5rem;
+            letter-spacing: 0.06em;
+            color: var(--text-tertiary);
+            font-weight: 600;
+            margin-bottom: 0.35rem;
         }}
 
-        .stat-value {{
-            font-size: 1.8rem;
+        .stat-val {{
+            font-size: 1.9rem;
             font-weight: 700;
+            letter-spacing: -0.02em;
         }}
 
-        /* ---- Report Panel ---- */
-        .report-panel {{
-            background: var(--card-bg);
-            border: 1px solid var(--card-border);
+        /* ---- Audit Form Section ---- */
+        .card-panel {{
+            background: var(--surface);
+            border: 1px solid var(--border);
             border-radius: 16px;
             padding: 1.75rem;
             margin-bottom: 2rem;
         }}
 
-        .panel-header {{
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1.25rem;
-        }}
-
-        .panel-title {{
-            font-size: 1.1rem;
+        .section-title {{
+            font-size: 1.05rem;
             font-weight: 600;
             color: #ffffff;
+            margin-bottom: 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }}
 
-        .report-form {{
+        .audit-grid {{
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 1.5rem;
         }}
 
-        .form-left {{
+        .form-col {{
             display: flex;
             flex-direction: column;
             gap: 1rem;
         }}
 
-        .form-group {{
+        .field-group {{
             display: flex;
             flex-direction: column;
-            gap: 0.35rem;
+            gap: 0.4rem;
         }}
 
-        .form-group label {{
-            font-size: 0.78rem;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-            font-weight: 500;
-        }}
-
-        .form-group input,
-        .form-group textarea {{
-            width: 100%;
-            background: #0d1322;
-            border: 1px solid var(--card-border);
-            border-radius: 10px;
-            color: #fff;
-            padding: 0.7rem 1rem;
-            font-family: inherit;
-            font-size: 0.9rem;
-            transition: border-color 0.2s ease;
-        }}
-
-        .form-group input:focus,
-        .form-group textarea:focus {{
-            outline: none;
-            border-color: var(--accent-blue);
-        }}
-
-        .form-group textarea {{
-            resize: vertical;
-            min-height: 70px;
-        }}
-
-        .coord-display {{
-            display: flex;
-            gap: 0.75rem;
-            align-items: center;
-            padding: 0.6rem 1rem;
-            background: rgba(59, 130, 246, 0.08);
-            border: 1px solid rgba(59, 130, 246, 0.2);
-            border-radius: 10px;
-            font-size: 0.85rem;
-        }}
-
-        .coord-display span {{
-            color: var(--accent-blue);
+        .field-group label {{
+            font-size: 0.75rem;
             font-weight: 600;
-            font-family: 'Courier New', monospace;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-secondary);
         }}
 
-        .form-right {{
+        .field-group input[type="text"],
+        .field-group input[type="number"],
+        .field-group input[type="date"],
+        .field-group textarea {{
+            width: 100%;
+            background: #0d121f;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: #ffffff;
+            padding: 0.65rem 0.9rem;
+            font-family: inherit;
+            font-size: 0.88rem;
+            transition: all 0.2s ease;
+        }}
+
+        .field-group input:focus,
+        .field-group textarea:focus {{
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-glow);
+        }}
+
+        .field-group textarea {{
+            resize: vertical;
+            min-height: 65px;
+        }}
+
+        .inline-row {{
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.85rem;
+        }}
+
+        .field-hint {{
+            font-size: 0.7rem;
+            color: var(--text-tertiary);
+            margin-top: 2px;
+        }}
+
+        /* Map Container */
+        .map-wrap {{
             display: flex;
             flex-direction: column;
+            height: 100%;
         }}
 
-        #reportMap {{
+        #auditMap {{
             flex: 1;
-            min-height: 280px;
-            border-radius: 12px;
-            border: 1px solid var(--card-border);
+            min-height: 290px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
             z-index: 1;
         }}
 
-        .map-hint {{
-            font-size: 0.75rem;
-            color: var(--text-muted);
+        .map-caption {{
+            font-size: 0.72rem;
+            color: var(--text-tertiary);
             margin-top: 0.5rem;
             text-align: center;
         }}
 
-        .btn-submit {{
-            background: linear-gradient(135deg, #ef4444, #3b82f6);
+        /* Buttons */
+        .btn-primary {{
+            background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
             color: #ffffff;
             border: none;
-            padding: 12px 24px;
-            border-radius: 10px;
-            font-size: 0.95rem;
+            padding: 0.8rem 1.5rem;
+            border-radius: 9px;
+            font-size: 0.9rem;
             font-weight: 600;
             cursor: pointer;
-            box-shadow: 0 4px 14px rgba(59, 130, 246, 0.4);
+            box-shadow: 0 4px 14px var(--accent-glow);
             transition: all 0.2s ease;
             margin-top: 0.5rem;
-            width: 100%;
         }}
 
-        .btn-submit:hover {{
+        .btn-primary:hover {{
             transform: translateY(-1px);
-            box-shadow: 0 6px 20px rgba(59, 130, 246, 0.6);
+            box-shadow: 0 6px 20px var(--accent-glow);
         }}
 
-        .btn-submit:disabled {{
-            opacity: 0.6;
+        .btn-primary:disabled {{
+            opacity: 0.5;
             cursor: not-allowed;
             transform: none;
         }}
 
-        /* ---- Scan Section ---- */
-        .scan-section {{
+        /* ---- Folder Scan Section ---- */
+        .scan-bar {{
             display: flex;
             align-items: center;
-            gap: 1rem;
+            justify-content: space-between;
             padding: 1rem 1.25rem;
-            background: rgba(139, 92, 246, 0.08);
-            border: 1px dashed var(--accent-purple);
+            background: var(--surface);
+            border: 1px solid var(--border);
             border-radius: 12px;
             margin-bottom: 2rem;
         }}
 
-        .scan-info {{
-            flex: 1;
+        .scan-left {{
+            display: flex;
+            align-items: center;
+            gap: 12px;
         }}
 
-        .scan-info .label {{
-            font-size: 0.85rem;
-            font-weight: 600;
-            color: var(--accent-purple);
+        .scan-icon {{
+            font-size: 1.2rem;
         }}
 
-        .scan-info .hint {{
-            font-size: 0.75rem;
-            color: var(--text-muted);
-            margin-top: 2px;
-        }}
-
-        .pending-badge {{
-            background: var(--accent-purple);
-            color: #fff;
-            padding: 3px 10px;
-            border-radius: 9999px;
-            font-size: 0.75rem;
-            font-weight: 700;
-        }}
-
-        .btn-scan {{
-            background: linear-gradient(135deg, #8b5cf6, #6d28d9);
-            color: #ffffff;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 10px;
+        .scan-title {{
             font-size: 0.88rem;
             font-weight: 600;
-            cursor: pointer;
-            box-shadow: 0 4px 14px rgba(139, 92, 246, 0.4);
-            transition: all 0.2s ease;
-            white-space: nowrap;
+            color: #ffffff;
         }}
 
-        .btn-scan:hover {{
-            transform: translateY(-1px);
-            box-shadow: 0 6px 20px rgba(139, 92, 246, 0.6);
+        .scan-sub {{
+            font-size: 0.75rem;
+            color: var(--text-tertiary);
         }}
 
-        .btn-scan:disabled {{
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
+        .scan-actions {{
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }}
 
-        .btn-clear {{
-            background: transparent;
-            border: 1px solid rgba(239, 68, 68, 0.4);
-            color: var(--accent-red);
-            padding: 10px 16px;
-            border-radius: 10px;
-            font-size: 0.82rem;
+        .badge-pending {{
+            background: rgba(99, 102, 241, 0.15);
+            color: var(--accent);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            padding: 3px 10px;
+            border-radius: 9999px;
+            font-size: 0.72rem;
             font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            white-space: nowrap;
         }}
 
-        .btn-clear:hover {{
-            background: rgba(239, 68, 68, 0.1);
+        .btn-secondary {{
+            background: var(--surface-subtle);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 0.82rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }}
+
+        .btn-secondary:hover {{
+            border-color: var(--border-hover);
+            background: #2d3748;
+        }}
+
+        .btn-danger {{
+            background: transparent;
+            border: 1px solid rgba(244, 63, 94, 0.3);
+            color: var(--accent-red);
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 0.82rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }}
+
+        .btn-danger:hover {{
+            background: rgba(244, 63, 94, 0.1);
             border-color: var(--accent-red);
         }}
 
-        /* ---- Status Messages ---- */
-        .status-msg {{
-            margin-top: 0.75rem;
+        /* Status banner */
+        .status-banner {{
+            margin-top: 1rem;
             padding: 0.75rem 1rem;
             border-radius: 8px;
             font-size: 0.82rem;
             display: none;
         }}
-
-        .status-msg.processing {{
-            display: block;
-            background: rgba(59, 130, 246, 0.1);
-            border: 1px solid var(--accent-blue);
-            color: var(--accent-blue);
-        }}
-
-        .status-msg.success {{
-            display: block;
-            background: rgba(16, 185, 129, 0.1);
-            border: 1px solid var(--accent-green);
-            color: var(--accent-green);
-        }}
-
-        .status-msg.error {{
-            display: block;
-            background: rgba(239, 68, 68, 0.1);
-            border: 1px solid var(--accent-red);
-            color: var(--accent-red);
-        }}
+        .status-banner.processing {{ display: block; background: rgba(99, 102, 241, 0.1); border: 1px solid var(--accent); color: #a5b4fc; }}
+        .status-banner.success {{ display: block; background: rgba(16, 185, 129, 0.1); border: 1px solid var(--accent-green); color: var(--accent-green); }}
+        .status-banner.error {{ display: block; background: rgba(244, 63, 94, 0.1); border: 1px solid var(--accent-red); color: var(--accent-red); }}
 
         /* ---- Table ---- */
-        .table-panel {{
-            background: var(--card-bg);
-            border: 1px solid var(--card-border);
-            border-radius: 16px;
+        .table-wrap {{
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
             overflow: hidden;
         }}
 
-        .table-header {{
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1.25rem 1.5rem 0.75rem 1.5rem;
+        .table-head-bar {{
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid var(--border);
         }}
 
-        .table-header h2 {{
-            font-size: 1rem;
+        .table-head-bar h2 {{
+            font-size: 0.95rem;
             font-weight: 600;
+            color: #ffffff;
         }}
 
         table {{
@@ -633,22 +619,23 @@ def serve_home():
         }}
 
         th {{
-            background: rgba(15, 23, 42, 0.9);
-            padding: 0.85rem 1.25rem;
-            font-size: 0.72rem;
-            color: var(--text-muted);
+            background: rgba(15, 23, 42, 0.6);
+            padding: 0.8rem 1.5rem;
+            font-size: 0.7rem;
+            color: var(--text-tertiary);
             text-transform: uppercase;
-            letter-spacing: 0.05em;
-            border-bottom: 1px solid var(--card-border);
+            letter-spacing: 0.06em;
+            font-weight: 600;
+            border-bottom: 1px solid var(--border);
         }}
 
         td {{
-            padding: 1rem 1.25rem;
-            border-bottom: 1px solid var(--card-border);
-            font-size: 0.88rem;
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.86rem;
         }}
 
-        tr:hover {{ background: rgba(30, 41, 59, 0.4); }}
+        tr:hover {{ background: rgba(255, 255, 255, 0.02); }}
         tr:last-child td {{ border-bottom: none; }}
 
         .project-name {{
@@ -659,137 +646,162 @@ def serve_home():
 
         .project-meta {{
             font-size: 0.72rem;
-            color: var(--text-muted);
+            color: var(--text-tertiary);
+        }}
+
+        .project-meta code {{
+            font-family: monospace;
+            color: var(--text-secondary);
         }}
 
         .location-cell {{
-            color: var(--text-muted);
+            color: var(--text-secondary);
             font-size: 0.82rem;
         }}
 
         .badge {{
-            padding: 4px 12px;
+            padding: 3px 10px;
             border-radius: 9999px;
             font-weight: 600;
             font-size: 0.72rem;
             display: inline-block;
         }}
 
-        .badge-PRIORITY_FIELD_VERIFICATION_RECOMMENDED {{ background: rgba(239, 68, 68, 0.2); color: var(--accent-red); border: 1px solid var(--accent-red); }}
-        .badge-PARTIAL_CHANGE_DETECTED {{ background: rgba(245, 158, 11, 0.2); color: var(--accent-yellow); border: 1px solid var(--accent-yellow); }}
-        .badge-HIGH_PHYSICAL_CHANGE_VERIFIED {{ background: rgba(16, 185, 129, 0.2); color: var(--accent-green); border: 1px solid var(--accent-green); }}
+        .badge-PRIORITY_FIELD_VERIFICATION_RECOMMENDED {{ background: rgba(244, 63, 94, 0.15); color: var(--accent-red); border: 1px solid rgba(244, 63, 94, 0.3); }}
+        .badge-PARTIAL_CHANGE_DETECTED {{ background: rgba(245, 158, 11, 0.15); color: var(--accent-amber); border: 1px solid rgba(245, 158, 11, 0.3); }}
+        .badge-HIGH_PHYSICAL_CHANGE_VERIFIED {{ background: rgba(16, 185, 129, 0.15); color: var(--accent-green); border: 1px solid rgba(16, 185, 129, 0.3); }}
 
         .btn-card {{
-            background: var(--accent-blue);
-            color: #ffffff;
+            color: var(--accent-cyan);
             text-decoration: none;
-            padding: 5px 14px;
-            border-radius: 6px;
-            font-size: 0.8rem;
+            font-size: 0.82rem;
             font-weight: 600;
-            display: inline-block;
             transition: opacity 0.2s;
         }}
-        .btn-card:hover {{ opacity: 0.85; }}
+        .btn-card:hover {{ opacity: 0.8; text-decoration: underline; }}
 
-        .empty-state {{
+        .empty-box {{
             text-align: center;
             padding: 3rem 2rem;
-            color: var(--text-muted);
-        }}
-
-        .empty-state .icon {{
-            font-size: 2.5rem;
-            margin-bottom: 0.75rem;
+            color: var(--text-tertiary);
         }}
 
         @media (max-width: 768px) {{
-            body {{ padding: 1rem; }}
+            body {{ padding: 1.5rem 1rem; }}
             .stats-grid {{ grid-template-columns: 1fr; }}
-            .report-form {{ grid-template-columns: 1fr; }}
-            .scan-section {{ flex-direction: column; text-align: center; }}
+            .audit-grid {{ grid-template-columns: 1fr; }}
+            .scan-bar {{ flex-direction: column; gap: 1rem; text-align: center; }}
         }}
     </style>
 </head>
 <body>
-    <div class="navbar">
-        <div class="brand-logo">
-            <div class="logo-icon">S</div>
-            <div>
-                <div class="brand-name">SENTRA</div>
-                <div style="font-size: 0.75rem; color: var(--text-muted);">AI-Powered Satellite Audit Engine</div>
+    <div class="container">
+        <!-- Navbar -->
+        <div class="navbar">
+            <div class="brand-group">
+                <div class="brand-icon">S</div>
+                <div>
+                    <div class="brand-title">SENTRA</div>
+                    <div class="brand-sub">AI Satellite Audit Platform for Public Infrastructure</div>
+                </div>
+            </div>
+            <div class="status-badge">
+                <div class="status-dot"></div>
+                Esri Wayback API Active
             </div>
         </div>
-        <div class="status-pill">
-            <div class="pulse-dot"></div>
-            Esri World Imagery Wayback Active
-        </div>
-    </div>
 
-    <div class="container">
+        <!-- Metrics Overview -->
         <div class="stats-grid">
             <div class="stat-card">
-                <div class="stat-title">Audited Projects</div>
-                <div class="stat-value" style="color:var(--accent-blue);">{total_audited}</div>
+                <div class="stat-label">Audited Projects</div>
+                <div class="stat-val" style="color: var(--accent-cyan);">{total_audited}</div>
             </div>
             <div class="stat-card">
-                <div class="stat-title">Flagged for Verification</div>
-                <div class="stat-value" style="color:var(--accent-red);">{flagged_count}</div>
+                <div class="stat-label">Flagged for Verification</div>
+                <div class="stat-val" style="color: var(--accent-red);">{flagged_count}</div>
             </div>
             <div class="stat-card">
-                <div class="stat-title">Verified</div>
-                <div class="stat-value" style="color:var(--accent-green);">{verified_count}</div>
+                <div class="stat-label">Verified Physical Work</div>
+                <div class="stat-val" style="color: var(--accent-green);">{verified_count}</div>
             </div>
         </div>
 
-        <div class="report-panel">
-            <div class="panel-header">
-                <div class="panel-title">📍 Report Infrastructure Work</div>
-            </div>
+        <!-- Main Audit Form -->
+        <div class="card-panel">
+            <div class="section-title">📍 Report Infrastructure Site for Satellite Audit</div>
 
-            <div class="report-form">
-                <div class="form-left">
-                    <div class="form-group">
+            <div class="audit-grid">
+                <!-- Form Inputs -->
+                <div class="form-col">
+                    <div class="field-group">
                         <label>Work Title</label>
-                        <input type="text" id="reportTitle" placeholder="e.g. Road resurfacing near Silk Board" />
+                        <input type="text" id="reportTitle" placeholder="e.g. Ward 12 Connector Road Asphalt Resurfacing" />
                     </div>
-                    <div class="form-group">
-                        <label>Description (optional)</label>
-                        <textarea id="reportDesc" placeholder="Any details about the infrastructure work..."></textarea>
+
+                    <div class="field-group">
+                        <label>Description (Optional)</label>
+                        <textarea id="reportDesc" placeholder="Brief description of the work going on..."></textarea>
                     </div>
-                    <div class="form-group">
-                        <label>Estimated Start Date</label>
-                        <input type="date" id="reportDate" />
+
+                    <!-- Coordinates: Editable Input Fields with Map Sync -->
+                    <div class="inline-row">
+                        <div class="field-group">
+                            <label>Latitude</label>
+                            <input type="number" step="any" id="reportLat" placeholder="12.9333" oninput="onCoordInputChanged()" />
+                        </div>
+                        <div class="field-group">
+                            <label>Longitude</label>
+                            <input type="number" step="any" id="reportLon" placeholder="77.6637" oninput="onCoordInputChanged()" />
+                        </div>
                     </div>
-                    <div class="coord-display">
-                        📌 Pin: <span id="coordLat">—</span>, <span id="coordLon">—</span>
+
+                    <!-- Date Range: Start & End Date -->
+                    <div class="inline-row">
+                        <div class="field-group">
+                            <label>Estimated Start Date</label>
+                            <input type="date" id="reportStartDate" />
+                        </div>
+                        <div class="field-group">
+                            <label>Completion / Check Date</label>
+                            <input type="date" id="reportEndDate" />
+                            <div class="field-hint">Defaults to today if left blank</div>
+                        </div>
                     </div>
-                    <button class="btn-submit" id="submitBtn" onclick="submitReport()">Run Satellite Audit</button>
+
+                    <button class="btn-primary" id="submitBtn" onclick="submitReport()">Run Space-Borne Satellite Audit</button>
+                    <div id="reportStatus" class="status-banner"></div>
                 </div>
-                <div class="form-right">
-                    <div id="reportMap"></div>
-                    <div class="map-hint">Drag the pin to the work location · Scroll to zoom</div>
+
+                <!-- Interactive Map -->
+                <div class="map-wrap">
+                    <div id="auditMap"></div>
+                    <div class="map-caption">💡 Drag pin or click map to pick coordinates · Or type Lat/Lon manually</div>
                 </div>
             </div>
-            <div id="reportStatus" class="status-msg"></div>
         </div>
 
-        <div class="scan-section">
-            <div class="scan-info">
-                <div class="label">📂 Scan Tender Folder</div>
-                <div class="hint">Drop PDF, image, or text files into <code>data/raw_tenders/</code> and click scan</div>
+        <!-- Tender Folder Scan Bar -->
+        <div class="scan-bar">
+            <div class="scan-left">
+                <span class="scan-icon">📂</span>
+                <div>
+                    <div class="scan-title">Scan Tender Documents Folder</div>
+                    <div class="scan-sub">Drop PDF, image, or text files into <code>data/raw_tenders/</code></div>
+                </div>
             </div>
-            <span class="pending-badge">{pending_count} pending</span>
-            <div style="display: flex; gap: 8px;">
-                <button class="btn-scan" id="scanBtn" onclick="scanFolder()">Scan & Audit</button>
-                <button class="btn-clear" onclick="clearHistory()">Clear All</button>
+            <div class="scan-actions">
+                <span class="badge-pending">{pending_count} pending</span>
+                <button class="btn-secondary" id="scanBtn" onclick="scanFolder()">Scan & Audit</button>
+                <button class="btn-danger" onclick="clearHistory()">Clear History</button>
             </div>
         </div>
-        <div id="scanStatus" class="status-msg"></div>
+        <div id="scanStatus" class="status-banner"></div>
 
-        <div class="table-panel">
-            <div class="table-header">
-                <h2>Audit Results</h2>
+        <!-- Audit Results Table -->
+        <div class="table-wrap">
+            <div class="table-head-bar">
+                <h2>Audit Results Log</h2>
             </div>
             <table>
                 <thead>
@@ -797,11 +809,11 @@ def serve_home():
                         <th>Project</th>
                         <th>Location</th>
                         <th>Verdict</th>
-                        <th>Evidence</th>
+                        <th style="text-align: right;">Evidence Card</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {rows_html if rows_html else '<tr><td colspan="4"><div class="empty-state"><div class="icon">🛰️</div><div>No audits yet. Report a work site above or scan tender documents.</div></div></td></tr>'}
+                    {rows_html if rows_html else '<tr><td colspan="4"><div class="empty-box">No satellite audits in database yet. Submit a work site above or scan tender documents.</div></td></tr>'}
                 </tbody>
             </table>
         </div>
@@ -809,13 +821,11 @@ def serve_home():
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
-        // ---- Map Initialization ----
+        // ---- Map & Bidirectional Coordinate Sync ----
         const defaultLat = 12.9716;
         const defaultLon = 77.5946;
-        let pinLat = defaultLat;
-        let pinLon = defaultLon;
 
-        const map = L.map('reportMap').setView([defaultLat, defaultLon], 13);
+        const map = L.map('auditMap').setView([defaultLat, defaultLon], 13);
         L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{
             maxZoom: 19,
             attribution: '© OpenStreetMap'
@@ -823,73 +833,92 @@ def serve_home():
 
         const marker = L.marker([defaultLat, defaultLon], {{ draggable: true }}).addTo(map);
 
-        function updateCoordDisplay(lat, lon) {{
-            pinLat = lat;
-            pinLon = lon;
-            document.getElementById('coordLat').textContent = lat.toFixed(6);
-            document.getElementById('coordLon').textContent = lon.toFixed(6);
+        // Update inputs when marker moves
+        function syncInputsFromMarker(lat, lon) {{
+            document.getElementById('reportLat').value = parseFloat(lat).toFixed(6);
+            document.getElementById('reportLon').value = parseFloat(lon).toFixed(6);
         }}
 
         marker.on('dragend', function(e) {{
             const pos = marker.getLatLng();
-            updateCoordDisplay(pos.lat, pos.lng);
+            syncInputsFromMarker(pos.lat, pos.lng);
         }});
 
         map.on('click', function(e) {{
             marker.setLatLng(e.latlng);
-            updateCoordDisplay(e.latlng.lat, e.latlng.lng);
+            syncInputsFromMarker(e.latlng.lat, e.latlng.lng);
         }});
 
-        // Attempt to use the user's current location
+        // Update marker when user edits Lat/Lon input fields manually
+        function onCoordInputChanged() {{
+            const latVal = parseFloat(document.getElementById('reportLat').value);
+            const lonVal = parseFloat(document.getElementById('reportLon').value);
+            if (!isNaN(latVal) && !isNaN(lonVal) && latVal >= -90 && latVal <= 90 && lonVal >= -180 && lonVal <= 180) {{
+                const newLatLng = new L.LatLng(latVal, lonVal);
+                marker.setLatLng(newLatLng);
+                map.panTo(newLatLng);
+            }}
+        }}
+
+        // Geolocation initialization
         if (navigator.geolocation) {{
             navigator.geolocation.getCurrentPosition(function(pos) {{
                 const lat = pos.coords.latitude;
                 const lon = pos.coords.longitude;
-                map.setView([lat, lon], 15);
+                map.setView([lat, lon], 14);
                 marker.setLatLng([lat, lon]);
-                updateCoordDisplay(lat, lon);
+                syncInputsFromMarker(lat, lon);
             }}, function(err) {{
-                // Geolocation denied or unavailable, use default
-                updateCoordDisplay(defaultLat, defaultLon);
+                syncInputsFromMarker(defaultLat, defaultLon);
             }});
         }} else {{
-            updateCoordDisplay(defaultLat, defaultLon);
+            syncInputsFromMarker(defaultLat, defaultLon);
         }}
 
-        // Default date to today
-        document.getElementById('reportDate').valueAsDate = new Date();
+        // Set default dates: Start Date to 6 months ago, End Date to today
+        const today = new Date();
+        const sixMonthsAgo = new Date();
+        sixMonthsAgo.setMonth(today.getMonth() - 6);
 
-        // Fix Leaflet map rendering in initially hidden or flexbox containers
-        setTimeout(() => map.invalidateSize(), 200);
+        document.getElementById('reportStartDate').valueAsDate = sixMonthsAgo;
+        document.getElementById('reportEndDate').valueAsDate = today;
 
-        // ---- Submit Community Report ----
+        setTimeout(() => map.invalidateSize(), 250);
+
+        // ---- Submit Report ----
         async function submitReport() {{
             const title = document.getElementById('reportTitle').value.trim();
             const desc = document.getElementById('reportDesc').value.trim();
-            const dateVal = document.getElementById('reportDate').value;
+            const latVal = parseFloat(document.getElementById('reportLat').value);
+            const lonVal = parseFloat(document.getElementById('reportLon').value);
+            const startDate = document.getElementById('reportStartDate').value;
+            const endDate = document.getElementById('reportEndDate').value;
             const btn = document.getElementById('submitBtn');
             const statusEl = document.getElementById('reportStatus');
 
             if (!title) {{
-                alert('Please enter a work title.');
+                alert('Please enter a project or work title.');
+                return;
+            }}
+            if (isNaN(latVal) || isNaN(lonVal)) {{
+                alert('Please enter or pick valid Latitude and Longitude coordinates.');
                 return;
             }}
 
             btn.disabled = true;
             btn.textContent = 'Analyzing satellite imagery...';
-            statusEl.className = 'status-msg processing';
-            statusEl.textContent = '⏳ Fetching satellite imagery and running change detection analysis...';
+            statusEl.className = 'status-banner processing';
+            statusEl.textContent = '⏳ Retrieving dual-temporal satellite imagery & computing spectral change...';
 
             try {{
                 const body = {{
                     title: title,
                     description: desc,
-                    latitude: pinLat,
-                    longitude: pinLon
+                    latitude: latVal,
+                    longitude: lonVal
                 }};
-                if (dateVal) {{
-                    body.estimated_start_date = dateVal;
-                }}
+                if (startDate) body.estimated_start_date = startDate;
+                if (endDate) body.estimated_end_date = endDate;
 
                 const resp = await fetch('/api/community/report', {{
                     method: 'POST',
@@ -899,32 +928,32 @@ def serve_home():
                 const data = await resp.json();
 
                 if (data.status === 'success') {{
-                    statusEl.className = 'status-msg success';
-                    statusEl.textContent = '✅ Audit complete — Verdict: ' + data.verdict;
+                    statusEl.className = 'status-banner success';
+                    statusEl.textContent = '✅ Audit Complete — Verdict: ' + data.verdict;
                     window.open(data.evidence_card_url, '_blank');
-                    setTimeout(() => window.location.reload(), 2500);
+                    setTimeout(() => window.location.reload(), 2000);
                 }} else {{
-                    statusEl.className = 'status-msg error';
+                    statusEl.className = 'status-banner error';
                     statusEl.textContent = '❌ ' + (data.detail || JSON.stringify(data));
                 }}
             }} catch (err) {{
-                statusEl.className = 'status-msg error';
+                statusEl.className = 'status-banner error';
                 statusEl.textContent = '❌ Request failed: ' + err.message;
             }} finally {{
                 btn.disabled = false;
-                btn.textContent = 'Run Satellite Audit';
+                btn.textContent = 'Run Space-Borne Satellite Audit';
             }}
         }}
 
-        // ---- Scan Tender Folder ----
+        // ---- Scan Folder ----
         async function scanFolder() {{
             const btn = document.getElementById('scanBtn');
             const statusEl = document.getElementById('scanStatus');
 
             btn.disabled = true;
             btn.textContent = 'Scanning...';
-            statusEl.className = 'status-msg processing';
-            statusEl.textContent = '⏳ Scanning tender folder and running satellite audits...';
+            statusEl.className = 'status-banner processing';
+            statusEl.textContent = '⏳ Scanning raw tenders folder...';
 
             try {{
                 const resp = await fetch('/api/audit/scan-folder', {{
@@ -934,15 +963,15 @@ def serve_home():
                 const data = await resp.json();
 
                 if (data.status === 'success') {{
-                    statusEl.className = 'status-msg success';
+                    statusEl.className = 'status-banner success';
                     statusEl.textContent = '✅ ' + data.message;
                     setTimeout(() => window.location.reload(), 2000);
                 }} else {{
-                    statusEl.className = 'status-msg error';
+                    statusEl.className = 'status-banner error';
                     statusEl.textContent = '❌ ' + (data.message || JSON.stringify(data));
                 }}
             }} catch (err) {{
-                statusEl.className = 'status-msg error';
+                statusEl.className = 'status-banner error';
                 statusEl.textContent = '❌ Scan failed: ' + err.message;
             }} finally {{
                 btn.disabled = false;
@@ -952,7 +981,7 @@ def serve_home():
 
         // ---- Clear History ----
         async function clearHistory() {{
-            if (!confirm('Clear all audited project records?')) return;
+            if (!confirm('Are you sure you want to clear all audited records?')) return;
             try {{
                 const resp = await fetch('/api/audit/clear-data', {{ method: 'POST' }});
                 const data = await resp.json();
@@ -966,7 +995,7 @@ def serve_home():
     </script>
 </body>
 </html>
-        """
+    """
         return HTMLResponse(content=html)
     except Exception as e:
         print(f"[App] Error in serve_home: {e}")
@@ -985,7 +1014,8 @@ def community_report_endpoint(request: CommunityReportRequest):
             description=request.description or "",
             latitude=request.latitude,
             longitude=request.longitude,
-            estimated_start_date=request.estimated_start_date
+            estimated_start_date=request.estimated_start_date,
+            estimated_end_date=request.estimated_end_date
         )
 
         print(f"\n[COMMUNITY REPORT] '{report.title}'")
