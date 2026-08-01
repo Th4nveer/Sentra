@@ -199,7 +199,7 @@ def serve_home():
         for ext in ["png", "svg", "jpg", "jpeg", "webp"]:
             logo_path = f"./static/logo.{ext}"
             if os.path.exists(logo_path):
-                logo_html = f'<img src="/static/logo.{ext}" alt="Logo" class="brand-logo-img" style="height: 38px; width: auto; max-width: 180px; object-fit: contain; border-radius: 8px;" />'
+                logo_html = f'<img src="/static/logo.{ext}" alt="Logo" class="brand-logo-img" style="height: 56px; width: auto; max-width: 260px; object-fit: contain; border-radius: 8px;" />'
                 break
 
         rows_html = ""
