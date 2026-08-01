@@ -20,6 +20,10 @@ LOCAL_GEO_REGISTRY: Dict[str, Dict[str, float]] = {
     "bengaluru ward 12": {"lat": 12.9333, "lon": 77.6637, "address": "Bellandur Lake, Bengaluru, Karnataka 560103"},
     "sector 4 civic park": {"lat": 28.5355, "lon": 77.3910, "address": "Sector 4 Civic Park, Noida, Uttar Pradesh 201301"},
     "noida sector 4": {"lat": 28.5355, "lon": 77.3910, "address": "Sector 4, Noida, Uttar Pradesh"},
+    "puintola": {"lat": 19.8242, "lon": 85.3441, "address": "Puintola, Odisha, India"},
+    "puintola to tangi": {"lat": 19.8242, "lon": 85.3441, "address": "NH 16, Puintola to Tangi, Odisha, India"},
+    "nh 5": {"lat": 19.8242, "lon": 85.3441, "address": "NH 5 (New NH 16), Odisha, India"},
+    "nh 16": {"lat": 19.8242, "lon": 85.3441, "address": "NH 16, Odisha, India"},
     "hosur main road drainage": {"lat": 12.9116, "lon": 77.6389, "address": "Hosur Main Road, Kudlu Gate Signal, Bengaluru, Karnataka 560068"},
     "mumbai bkc connector": {"lat": 19.0657, "lon": 72.8687, "address": "Bandra Kurla Complex, Mumbai, Maharashtra"},
     "gachibowli flyover": {"lat": 17.4401, "lon": 78.3489, "address": "Gachibowli, Hyderabad, Telangana"},
@@ -31,7 +35,7 @@ DEFAULT_LON = 77.6637
 
 class Geocoder:
     def __init__(self, user_agent: Optional[str] = None):
-        self.user_agent = user_agent or os.getenv("GEOLOCATION_USER_AGENT", "Sentra-Satellite-Audit/1.0")
+        self.user_agent = user_agent or os.getenv("GEOLOCATION_USER_AGENT", "Sentra-Satellite-Audit/1.0 (contact@sentra-audit.org)")
 
     def geocode(self, location_text: str, radius_km: float = 0.5) -> GeocodingResult:
         """
