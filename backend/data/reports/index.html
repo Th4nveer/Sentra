@@ -1,0 +1,288 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SENTRA - AI Satellite Audit Triage Queue</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0b0f19;
+            --card-bg: #151d30;
+            --border: #1e293b;
+            --accent-red: #ef4444;
+            --accent-yellow: #f59e0b;
+            --accent-green: #10b981;
+            --accent-blue: #3b82f6;
+            --text: #f8fafc;
+            --muted: #94a3b8;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            padding: 2rem;
+        }
+
+        .header {
+            max-width: 1200px;
+            margin: 0 auto 1.5rem auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .brand h1 {
+            font-size: 1.8rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            background: linear-gradient(135deg, #ef4444 0%, #f59e0b 50%, #3b82f6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .brand p { color: var(--muted); font-size: 0.88rem; }
+
+        .disclaimer-banner {
+            max-width: 1200px;
+            margin: 0 auto 1.5rem auto;
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-radius: 10px;
+            padding: 0.75rem 1.25rem;
+            font-size: 0.82rem;
+            color: #cbd5e1;
+        }
+
+        .stats-grid {
+            max-width: 1200px;
+            margin: 0 auto 2rem auto;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1.25rem;
+        }
+
+        .stat-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.25rem;
+        }
+
+        .stat-title { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; margin-bottom: 0.4rem; }
+        .stat-val { font-size: 1.75rem; font-weight: 700; }
+
+        .table-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            overflow: hidden;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+
+        th {
+            background: rgba(15, 23, 42, 0.8);
+            padding: 1rem;
+            font-size: 0.75rem;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border-bottom: 1px solid var(--border);
+        }
+
+        td {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.88rem;
+        }
+
+        tr:hover { background: rgba(30, 41, 59, 0.4); }
+
+        .badge {
+            padding: 0.35rem 0.75rem;
+            border-radius: 9999px;
+            font-weight: 600;
+            font-size: 0.72rem;
+            display: inline-block;
+        }
+
+        .badge-PRIORITY_FIELD_VERIFICATION_RECOMMENDED { background: rgba(239, 68, 68, 0.2); color: var(--accent-red); border: 1px solid var(--accent-red); }
+        .badge-PARTIAL_CHANGE_DETECTED { background: rgba(245, 158, 11, 0.2); color: var(--accent-yellow); border: 1px solid var(--accent-yellow); }
+        .badge-HIGH_PHYSICAL_CHANGE_VERIFIED { background: rgba(16, 185, 129, 0.2); color: var(--accent-green); border: 1px solid var(--accent-green); }
+
+        .btn-card {
+            background: var(--accent-blue);
+            color: #ffffff;
+            text-decoration: none;
+            padding: 0.4rem 0.8rem;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            display: inline-block;
+        }
+        .btn-card:hover { opacity: 0.9; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="brand">
+            <h1>SENTRA AUDIT PLATFORM</h1>
+            <p>Space-Borne AI Satellite Triage Queue for Human Auditors</p>
+        </div>
+    </div>
+
+    <div class="disclaimer-banner">
+        <strong style="color:var(--accent-blue);">HUMAN-IN-THE-LOOP SCREENING AID:</strong> Sentra produces a probability-scored triage queue ranking highest-budget, lowest-physical-change projects for priority field inspection. It never issues automated final verdicts of fraud.
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-title">Total Audited Projects</div>
+            <div class="stat-val" style="color:var(--accent-blue);">4</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-title">Priority Verification Flags</div>
+            <div class="stat-val" style="color:var(--accent-red);">0</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-title">Partial Work Alerts</div>
+            <div class="stat-val" style="color:var(--accent-yellow);">0</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-title">Flagged Budget Risk</div>
+            <div class="stat-val" style="color:var(--accent-red);">Rs. 0.00 Cr</div>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Tender ID</th>
+                    <th>Project Name</th>
+                    <th>Department</th>
+                    <th>Budget</th>
+                    <th>Physical Alteration</th>
+                    <th>Triage Risk</th>
+                    <th>Audit Status</th>
+                    <th>Evidence Card</th>
+                </tr>
+            </thead>
+            <tbody>
+                
+                <tr>
+                    <td><strong>WO-DSIRDA-2018-INFRA-004</strong></td>
+                    <td>Development of Industrial Expressway & Utility Corridors - Phase 2</td>
+                    <td>Dholera Special Investment Region Development Authority, Government of Gujarat</td>
+                    <td>Rs. 185.00 Cr</td>
+                    <td>
+                        <strong style="color:var(--accent-green);">
+                            92.99%
+                        </strong>
+                    </td>
+                    <td>
+                        <strong style="color:var(--accent-green);">
+                            8.06%
+                        </strong>
+                    </td>
+                    <td>
+                        <span class="badge badge-HIGH_PHYSICAL_CHANGE_VERIFIED">
+                            HIGH PHYSICAL CHANGE VERIFIED
+                        </span>
+                    </td>
+                    <td>
+                        <a class="btn-card" href="./WO-DSIRDA-2018-INFRA-004/evidence_card.html" target="_blank">View Card</a>
+                    </td>
+                </tr>
+                
+                <tr>
+                    <td><strong>CR-66FF0A7D</strong></td>
+                    <td>test</td>
+                    <td>Community Report</td>
+                    <td>Rs. 0.00 Cr</td>
+                    <td>
+                        <strong style="color:var(--accent-green);">
+                            100.0%
+                        </strong>
+                    </td>
+                    <td>
+                        <strong style="color:var(--accent-green);">
+                            0.0%
+                        </strong>
+                    </td>
+                    <td>
+                        <span class="badge badge-HIGH_PHYSICAL_CHANGE_VERIFIED">
+                            HIGH PHYSICAL CHANGE VERIFIED
+                        </span>
+                    </td>
+                    <td>
+                        <a class="btn-card" href="./CR-66FF0A7D/evidence_card.html" target="_blank">View Card</a>
+                    </td>
+                </tr>
+                
+                <tr>
+                    <td><strong>BDA/EE/TENDER/T-206/19-20</strong></td>
+                    <td>Restoration and Development of Bellandur Lake</td>
+                    <td>Bangalore Development Authority</td>
+                    <td>Rs. 24.50 Cr</td>
+                    <td>
+                        <strong style="color:var(--accent-green);">
+                            100.0%
+                        </strong>
+                    </td>
+                    <td>
+                        <strong style="color:var(--accent-green);">
+                            0.0%
+                        </strong>
+                    </td>
+                    <td>
+                        <span class="badge badge-HIGH_PHYSICAL_CHANGE_VERIFIED">
+                            HIGH PHYSICAL CHANGE VERIFIED
+                        </span>
+                    </td>
+                    <td>
+                        <a class="btn-card" href="./BDA/EE/TENDER/T-206/19-20/evidence_card.html" target="_blank">View Card</a>
+                    </td>
+                </tr>
+                
+                <tr>
+                    <td><strong>CR-54C6D18A</strong></td>
+                    <td>Home</td>
+                    <td>Community Report</td>
+                    <td>Rs. 0.00 Cr</td>
+                    <td>
+                        <strong style="color:var(--accent-green);">
+                            100.0%
+                        </strong>
+                    </td>
+                    <td>
+                        <strong style="color:var(--accent-green);">
+                            0.0%
+                        </strong>
+                    </td>
+                    <td>
+                        <span class="badge badge-HIGH_PHYSICAL_CHANGE_VERIFIED">
+                            HIGH PHYSICAL CHANGE VERIFIED
+                        </span>
+                    </td>
+                    <td>
+                        <a class="btn-card" href="./CR-54C6D18A/evidence_card.html" target="_blank">View Card</a>
+                    </td>
+                </tr>
+                
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>
+        

@@ -1,0 +1,174 @@
+[
+  {
+    "tender": {
+      "tender_id": "CR-66FF0A7D",
+      "project_name": "test",
+      "department": "Community Report",
+      "project_type": "general",
+      "budget_inr": 0.0,
+      "start_date": "2026-02-02",
+      "completion_date": "2026-08-02",
+      "contractor_name": "Reported by Citizen",
+      "location_text": "12.973754632795046, 77.58670806535521",
+      "expected_alteration_type": "general_surface_change"
+    },
+    "geocoding": {
+      "latitude": 12.973754632795046,
+      "longitude": 77.58670806535521,
+      "bounding_box": [
+        12.96925,
+        77.566811,
+        12.978259,
+        77.606605
+      ],
+      "confidence": 1.0,
+      "formatted_address": "Nrupatunga Road, Sampangirama Nagar, Bengaluru Central City Corporation, Bengaluru, Bangalore North, Bengaluru Urban, Karnataka, 560001, India",
+      "geocoding_source": "community_pin"
+    },
+    "audit": {
+      "tender_id": "CR-66FF0A7D",
+      "project_type": "general",
+      "physical_alteration_score": 100.0,
+      "fraud_risk_score": 0.0,
+      "classification": "HIGH_PHYSICAL_CHANGE_VERIFIED",
+      "confidence_level": 0.88,
+      "hedged_verdict_copy": "Significant physical surface transformation detected matching tender specifications.",
+      "ssim_score": 0.557,
+      "spectral_shift_mean": 0.2105,
+      "delta_ndvi_mean": -0.01,
+      "delta_ndbi_mean": 0.01,
+      "audit_summary": "VERIFIED: Satellite audit confirms significant physical surface transformation (100.0%) aligned with tender specifications.",
+      "model_version": "Sentra-CV-v0.1-SiameseSpectral"
+    },
+    "card_path": "./data/reports\\CR-66FF0A7D\\evidence_card.html"
+  },
+  {
+    "tender": {
+      "tender_id": "WO-DSIRDA-2018-INFRA-004",
+      "project_name": "Development of Industrial Expressway & Utility Corridors - Phase 2",
+      "department": "Dholera Special Investment Region Development Authority, Government of Gujarat",
+      "project_type": "road_resurfacing",
+      "budget_inr": 1850000000.0,
+      "start_date": "2018-09-15",
+      "completion_date": "2023-06-30",
+      "contractor_name": "Larsen & Toubro Construction (Infrastructure IC)",
+      "location_text": "Dholera SIR, Ahmedabad District, Gujarat - along the Gulf of Khambhat Region",
+      "expected_alteration_type": "asphalt_laying"
+    },
+    "geocoding": {
+      "latitude": 22.2180281,
+      "longitude": 72.2074196,
+      "bounding_box": [
+        22.213524,
+        72.195801,
+        22.222533,
+        72.219038
+      ],
+      "confidence": 0.8,
+      "formatted_address": "Dholera SIR, Dholera, Dholera Taluka, Ahmedabad, Gujarat, 382455, India",
+      "geocoding_source": "nominatim"
+    },
+    "audit": {
+      "tender_id": "WO-DSIRDA-2018-INFRA-004",
+      "project_type": "road_resurfacing",
+      "physical_alteration_score": 92.99,
+      "fraud_risk_score": 8.06,
+      "classification": "HIGH_PHYSICAL_CHANGE_VERIFIED",
+      "confidence_level": 0.88,
+      "hedged_verdict_copy": "Significant physical surface transformation detected matching tender specifications.",
+      "ssim_score": 0.3692,
+      "spectral_shift_mean": 0.2344,
+      "delta_ndvi_mean": 0.0289,
+      "delta_ndbi_mean": -0.0289,
+      "audit_summary": "VERIFIED: Satellite audit confirms significant physical surface transformation (92.99%) aligned with tender specifications.",
+      "model_version": "Sentra-CV-v0.1-SiameseSpectral"
+    },
+    "card_path": "./data/reports\\WO-DSIRDA-2018-INFRA-004\\evidence_card.html"
+  },
+  {
+    "tender": {
+      "tender_id": "BDA/EE/TENDER/T-206/19-20",
+      "project_name": "Restoration and Development of Bellandur Lake",
+      "department": "Bangalore Development Authority",
+      "project_type": "water_supply",
+      "budget_inr": 245000000.0,
+      "start_date": "2020-02-01",
+      "completion_date": "2021-02-01",
+      "contractor_name": "Unknown",
+      "location_text": "Bellandur, Ibbalur, Agara, Beluru & Kempapura villages, Bengaluru East Taluk, Bengaluru",
+      "expected_alteration_type": "excavation"
+    },
+    "geocoding": {
+      "latitude": 12.9333,
+      "longitude": 77.6637,
+      "bounding_box": [
+        12.928795,
+        77.643741,
+        12.937805,
+        77.683659
+      ],
+      "confidence": 0.95,
+      "formatted_address": "Bellandur Lake, Bengaluru, Karnataka 560103",
+      "geocoding_source": "local_registry"
+    },
+    "audit": {
+      "tender_id": "BDA/EE/TENDER/T-206/19-20",
+      "project_type": "water_supply",
+      "physical_alteration_score": 100.0,
+      "fraud_risk_score": 0.0,
+      "classification": "HIGH_PHYSICAL_CHANGE_VERIFIED",
+      "confidence_level": 0.88,
+      "hedged_verdict_copy": "Significant physical surface transformation detected matching tender specifications.",
+      "ssim_score": 0.5048,
+      "spectral_shift_mean": 0.1964,
+      "delta_ndvi_mean": -0.0559,
+      "delta_ndbi_mean": 0.0559,
+      "audit_summary": "VERIFIED: Satellite audit confirms significant physical surface transformation (100.0%) aligned with tender specifications.",
+      "model_version": "Sentra-CV-v0.1-SiameseSpectral"
+    },
+    "card_path": "./data/reports\\BDA/EE/TENDER/T-206/19-20\\evidence_card.html"
+  },
+  {
+    "tender": {
+      "tender_id": "CR-54C6D18A",
+      "project_name": "Home",
+      "department": "Community Report",
+      "project_type": "general",
+      "budget_inr": 0.0,
+      "start_date": "2015-02-09",
+      "completion_date": "2026-08-02",
+      "contractor_name": "Reported by Citizen",
+      "location_text": "11.872301305688621, 75.35660326480865",
+      "expected_alteration_type": "general_surface_change"
+    },
+    "geocoding": {
+      "latitude": 11.872301305688621,
+      "longitude": 75.35660326480865,
+      "bounding_box": [
+        11.867797,
+        75.33486,
+        11.876806,
+        75.378346
+      ],
+      "confidence": 1.0,
+      "formatted_address": "Talap, Kannur, Kerala, 670013, India",
+      "geocoding_source": "community_pin"
+    },
+    "audit": {
+      "tender_id": "CR-54C6D18A",
+      "project_type": "general",
+      "physical_alteration_score": 100.0,
+      "fraud_risk_score": 0.0,
+      "classification": "HIGH_PHYSICAL_CHANGE_VERIFIED",
+      "confidence_level": 0.88,
+      "hedged_verdict_copy": "Significant physical surface transformation detected matching tender specifications.",
+      "ssim_score": 0.3978,
+      "spectral_shift_mean": 0.2216,
+      "delta_ndvi_mean": 0.0176,
+      "delta_ndbi_mean": -0.0176,
+      "audit_summary": "VERIFIED: Satellite audit confirms significant physical surface transformation (100.0%) aligned with tender specifications.",
+      "model_version": "Sentra-CV-v0.1-SiameseSpectral"
+    },
+    "card_path": "./data/reports\\CR-54C6D18A\\evidence_card.html"
+  }
+]
