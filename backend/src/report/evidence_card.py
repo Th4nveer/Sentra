@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Dict, Any
 from jinja2 import Template
 import numpy as np
-import matplotlib.pyplot as plt
+from PIL import Image
 
 from src.parser.models import TenderData, GeocodingResult
 from src.cv_engine.detector import AuditResult
@@ -79,10 +79,8 @@ class EvidenceCardGenerator:
         before_arr = sat_data.get("before_array")
         after_arr = sat_data.get("after_array")
         if before_arr is None or after_arr is None:
-            fig, ax = plt.subplots(figsize=(4, 4), facecolor='#0f172a')
-            ax.axis('off')
-            plt.savefig(output_path, facecolor=fig.get_facecolor())
-            plt.close()
+            img = Image.new("RGB", (300, 300), color=(15, 23, 42))
+            img.save(output_path)
             return
 
         red_b, nir_b = before_arr[:, :, 0], before_arr[:, :, 3]
@@ -92,12 +90,15 @@ class EvidenceCardGenerator:
         ndbi_a = (red_a - nir_a) / np.maximum(red_a + nir_a, 1e-5)
         delta_ndbi = ndbi_a - ndbi_b
 
-        fig, ax = plt.subplots(figsize=(6, 4), facecolor='#0f172a')
-        ax.imshow(delta_ndbi, cmap='coolwarm', vmin=-0.5, vmax=0.5)
-        ax.axis('off')
-        plt.tight_layout()
-        plt.savefig(output_path, dpi=120, bbox_inches='tight', facecolor=fig.get_facecolor())
-        plt.close()
+        # Map delta_ndbi (-0.5 to 0.5) to RGB heatmap color (Coolwarm palette)
+        norm = np.clip((delta_ndbi + 0.5), 0.0, 1.0)
+        r = np.clip(255 * (2 * norm - 0.5), 0, 255).astype(np.uint8)
+        g = np.clip(255 * (1 - 2 * np.abs(norm - 0.5)), 0, 255).astype(np.uint8)
+        b = np.clip(255 * (1.5 - 2 * norm), 0, 255).astype(np.uint8)
+
+        rgb = np.stack([r, g, b], axis=-1)
+        img = Image.fromarray(rgb, mode="RGB")
+        img.save(output_path)
 
     def _render_html_template(self, **kwargs) -> str:
         template_str = """

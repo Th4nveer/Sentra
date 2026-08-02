@@ -4,7 +4,6 @@ Evaluates physical surface transformations, computes probability-scored triage,
 and outputs human-in-the-loop audit evidence.
 """
 import numpy as np
-from scipy.ndimage import gaussian_filter
 from typing import Dict, Any, Tuple, Optional
 from pydantic import BaseModel, Field
 
@@ -25,6 +24,18 @@ class AuditResult(BaseModel):
     delta_ndbi_mean: float = Field(description="Mean change in built-up index")
     audit_summary: str = Field(description="Detailed human-readable audit justification")
     model_version: str = Field(default="Sentra-CV-v0.1-SiameseSpectral", description="CV Model & Algorithm Version")
+
+
+def _gaussian_filter_2d(arr: np.ndarray, sigma: float = 1.5) -> np.ndarray:
+    """Pure NumPy 2D separable Gaussian filter implementation."""
+    radius = int(4 * sigma + 0.5)
+    x = np.arange(-radius, radius + 1)
+    kernel1d = np.exp(-0.5 * (x / sigma) ** 2)
+    kernel1d /= kernel1d.sum()
+
+    out = np.apply_along_axis(lambda m: np.convolve(m, kernel1d, mode='same'), axis=1, arr=arr)
+    out = np.apply_along_axis(lambda m: np.convolve(m, kernel1d, mode='same'), axis=0, arr=out)
+    return out
 
 
 class ChangeDetectionPipeline:
@@ -131,16 +142,16 @@ class ChangeDetectionPipeline:
         c1 = (0.01 * 1.0) ** 2
         c2 = (0.03 * 1.0) ** 2
 
-        mu1 = gaussian_filter(g1, sigma=1.5)
-        mu2 = gaussian_filter(g2, sigma=1.5)
+        mu1 = _gaussian_filter_2d(g1, sigma=1.5)
+        mu2 = _gaussian_filter_2d(g2, sigma=1.5)
 
         mu1_sq = mu1 ** 2
         mu2_sq = mu2 ** 2
         mu1_mu2 = mu1 * mu2
 
-        sigma1_sq = gaussian_filter(g1 ** 2, sigma=1.5) - mu1_sq
-        sigma2_sq = gaussian_filter(g2 ** 2, sigma=1.5) - mu2_sq
-        sigma12 = gaussian_filter(g1 * g2, sigma=1.5) - mu1_mu2
+        sigma1_sq = _gaussian_filter_2d(g1 ** 2, sigma=1.5) - mu1_sq
+        sigma2_sq = _gaussian_filter_2d(g2 ** 2, sigma=1.5) - mu2_sq
+        sigma12 = _gaussian_filter_2d(g1 * g2, sigma=1.5) - mu1_mu2
 
         ssim_map = ((2 * mu1_mu2 + c1) * (2 * sigma12 + c2)) / (
             (mu1_sq + mu2_sq + c1) * (sigma1_sq + sigma2_sq + c2)
